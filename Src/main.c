@@ -57,9 +57,9 @@
 /* USER CODE BEGIN PD */
 
 
-#define		KP_ROLL_PITCH_OMEGA		1.1f //1.3f  //1.1
+#define		KP_ROLL_PITCH_OMEGA		0.6f //1.3f  //1.1
 #define		KI_ROLL_PITCH_OMEGA		0.001f  //0.0052f;
-#define		KD_ROLL_PITCH_OMEGA		12.0f  //12.6f;
+#define		KD_ROLL_PITCH_OMEGA		5.0f  //12.6f;
 
 /* USER CODE END PD */
 
@@ -128,7 +128,7 @@ double kd_yaw = 0;
 float pid_output_yaw = 0, pid_error_temp_yaw = 0, pid_i_mem_yaw = 0, pid_last_yaw_d_error = 0;
 float pid_max_yaw = 100;
 
-double kp_yaw_omega = 3.0f;
+double kp_yaw_omega = 4.0f;
 double ki_yaw_omega = 0.02f;
 double kd_yaw_omega = 0.0f;
 float pid_output_yaw_omega = 0, pid_error_temp_yaw_omega = 0, pid_i_mem_yaw_omega = 0, pid_last_yaw_d_error_omega = 0;
@@ -382,7 +382,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_3 , esc2 ); //PA2
 		__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_4 , esc4 ); //PA3				
 
-		__HAL_TIM_SetCounter(&htim2,19998);	//RESET Counter
+		//__HAL_TIM_SetCounter(&htim2,19998);	//RESET Counter
 			}
 }
 
