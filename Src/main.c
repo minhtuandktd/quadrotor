@@ -57,9 +57,27 @@
 /* USER CODE BEGIN PD */
 
 
+
 #define		KP_ROLL_PITCH_OMEGA		0.6f //1.3f  //1.1
 #define		KI_ROLL_PITCH_OMEGA		0.001f  //0.0052f;
 #define		KD_ROLL_PITCH_OMEGA		5.0f  //12.6f;
+
+//Auto run parameter
+#define 	AUTO_RUN														0				//1 = on, 0 = off
+#define 	RUNNING_TIME												20			//seconds
+							
+							
+//PID Parameters							
+#define		KP_ROLL_PITCH												5.0f 		
+#define		KI_ROLL_PITCH												0.0f  
+#define		KD_ROLL_PITCH												0.0f 	
+							
+#define		KP_ROLL_PITCH_OMEGA									1.1f 		//1.3f  //1.1
+#define		KI_ROLL_PITCH_OMEGA									0.001f  //0.0052f;
+#define		KD_ROLL_PITCH_OMEGA									12.0f 	//12.6f;
+#define 	ROLL_PITCH_MAX_INTEGRAL							200.0f
+#define 	ROLL_PITCH_MAX_OUTPUT								400.0f
+
 
 /* USER CODE END PD */
 
@@ -90,9 +108,9 @@ extern float gyro_that[3];
 
 /////////////////PID CONSTANTS/////////////////
 /*----------ROLL------------*/
-double kp_roll = 5.0f;
-double ki_roll = 0.0f;
-double kd_roll = 0.0f;
+double kp_roll = KP_ROLL_PITCH;
+double ki_roll = KI_ROLL_PITCH;
+double kd_roll = KD_ROLL_PITCH;
 float pid_output_roll = 0, pid_error_temp_roll = 0, pid_i_mem_roll = 0, pid_last_roll_d_error =0 ;
 float pid_max_roll = 250.0f ;//25
 
@@ -101,23 +119,23 @@ double kp_roll_omega = KP_ROLL_PITCH_OMEGA;
 double ki_roll_omega = KI_ROLL_PITCH_OMEGA;
 double kd_roll_omega = KD_ROLL_PITCH_OMEGA ;
 
-float pid_max_roll_omega_integral = 150.0f;
-float pid_max_roll_omega = 400.0f;
+float pid_max_roll_omega_integral = ROLL_PITCH_MAX_INTEGRAL;
+float pid_max_roll_omega = ROLL_PITCH_MAX_OUTPUT;
 
 /*----------PITCH------------*/
-double kp_pitch = 5.0f;    
-double ki_pitch = 0.0f;  
-double kd_pitch = 0.0f;   
-float pid_output_pitch = 0, pid_error_temp_pitch = 0, pid_i_mem_pitch = 0, pid_last_pitch_d_error =0 ;
+double kp_pitch = KP_ROLL_PITCH;    
+double ki_pitch = KI_ROLL_PITCH;  
+double kd_pitch = KD_ROLL_PITCH;   
+float pid_output_pitch = 0, pid_error_temp_pitch = 0, pid_i_mem_pitch = 0, pid_last_pitch_d_error = 0 ;
 float pid_max_pitch = 250.0f ;
 
 double kp_pitch_omega = KP_ROLL_PITCH_OMEGA;     
 double ki_pitch_omega = KI_ROLL_PITCH_OMEGA;  
 double kd_pitch_omega = KD_ROLL_PITCH_OMEGA;   
-float pid_output_pitch_omega = 0, pid_error_temp_pitch_omega = 0, pid_i_mem_pitch_omega = 0, pid_last_pitch_d_error_omega =0 ;
+float pid_output_pitch_omega = 0, pid_error_temp_pitch_omega = 0, pid_i_mem_pitch_omega = 0, pid_last_pitch_d_error_omega = 0 ;
 
-float pid_max_pitch_omega_integral = 150.0f;
-float pid_max_pitch_omega = 400.0f ;
+float pid_max_pitch_omega_integral = ROLL_PITCH_MAX_INTEGRAL;
+float pid_max_pitch_omega = ROLL_PITCH_MAX_OUTPUT ;
 
 /*----------YAW------------*/
 float yaw_offset = 0, yaw_offset_tmp = 0;
@@ -132,7 +150,8 @@ double kp_yaw_omega = 4.0f;
 double ki_yaw_omega = 0.02f;
 double kd_yaw_omega = 0.0f;
 float pid_output_yaw_omega = 0, pid_error_temp_yaw_omega = 0, pid_i_mem_yaw_omega = 0, pid_last_yaw_d_error_omega = 0;
-float pid_max_yaw_omega = 400.0f;
+float pid_max_yaw_omega = 60.0f;
+float pid_max_yaw_omega_integral = 40.0f;
 
 //----------------------
 
@@ -281,8 +300,8 @@ void PID_Controller_Omega(void)
 	
 	pid_i_mem_roll_omega += ki_roll_omega * pid_error_temp_roll_omega;
 	
-	if (pid_i_mem_roll_omega > pid_max_roll_omega) pid_i_mem_roll_omega = pid_max_roll_omega;
-	else if (pid_i_mem_roll_omega < pid_max_roll_omega * (-1)) pid_i_mem_roll_omega = pid_max_roll_omega* (-1);
+	if (pid_i_mem_roll_omega > pid_max_roll_omega_integral) pid_i_mem_roll_omega = pid_max_roll_omega_integral;
+	else if (pid_i_mem_roll_omega < pid_max_roll_omega_integral * (-1)) pid_i_mem_roll_omega = pid_max_roll_omega_integral* (-1);
 	
 	pid_output_roll_omega = kp_roll_omega*pid_error_temp_roll_omega + pid_i_mem_roll_omega + kd_roll_omega * (pid_error_temp_roll_omega - pid_last_roll_d_error_omega);
 	
@@ -297,8 +316,8 @@ void PID_Controller_Omega(void)
 	
 	pid_i_mem_pitch_omega += ki_pitch_omega * pid_error_temp_pitch_omega;
 
-	if (pid_i_mem_pitch_omega > pid_max_pitch_omega) pid_i_mem_pitch_omega = pid_max_pitch_omega;
-	else if (pid_i_mem_pitch_omega < pid_max_pitch_omega * (-1)) pid_i_mem_pitch_omega = pid_max_pitch_omega* (-1);
+	if (pid_i_mem_pitch_omega > pid_max_pitch_omega_integral) pid_i_mem_pitch_omega = pid_max_pitch_omega_integral;
+	else if (pid_i_mem_pitch_omega < pid_max_pitch_omega_integral * (-1)) pid_i_mem_pitch_omega = pid_max_pitch_omega_integral* (-1);
 	
 	pid_output_pitch_omega = kp_pitch_omega * pid_error_temp_pitch_omega + pid_i_mem_pitch_omega + kd_pitch_omega * (pid_error_temp_pitch_omega - pid_last_pitch_d_error_omega);
 	
@@ -315,8 +334,8 @@ void PID_Controller_Omega(void)
 	
 	pid_i_mem_yaw_omega += ki_yaw_omega * pid_error_temp_yaw_omega;
 	
-	if (pid_i_mem_yaw_omega > pid_max_yaw_omega) pid_i_mem_yaw_omega = pid_max_yaw_omega;
-	else if (pid_i_mem_yaw_omega < pid_max_yaw_omega * (-1)) pid_i_mem_yaw_omega = pid_max_yaw_omega * (-1);
+	if (pid_i_mem_yaw_omega > pid_max_yaw_omega_integral) pid_i_mem_yaw_omega = pid_max_yaw_omega_integral;
+	else if (pid_i_mem_yaw_omega < pid_max_yaw_omega_integral * (-1)) pid_i_mem_yaw_omega = pid_max_yaw_omega_integral * (-1);
 	
 	pid_output_yaw_omega = kp_yaw_omega * pid_error_temp_yaw_omega + pid_i_mem_yaw_omega + kd_yaw_omega * (pid_error_temp_yaw_omega - pid_last_yaw_d_error_omega);
 	
@@ -335,6 +354,9 @@ void Reset_PID(void)
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+uint32_t auto_run_counter_temp = 0, auto_run_counter = 0;
+uint8_t control_counter = 0;
+
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
 	if(htim->Instance == TIM3)
@@ -342,28 +364,46 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		MPU9255_Get_Data();
 		IMU_GetYawPitchRoll();
 
-		
-		if ( channel_5 > 1500)
+#if AUTO_RUN
+		if (start == 1)
+		{
+			auto_run_counter_temp++;
+			if (auto_run_counter_temp == 250){
+				auto_run_counter++;
+				if (auto_run_counter == RUNNING_TIME){
+					start = 0;
+					break;
+				}
+				auto_run_counter_temp = 0;
+			}
+#endif
+			
+			if ( channel_5 > 1500)
 				{
-					PID_Controller_Angles();
+					control_counter++;
+					
+					if (control_counter == 4){								//Change the compared value to change the speed of angle control loop
+						PID_Controller_Angles();
+					}
+					
 					PID_Controller_Omega();
 					ga = channel_3 ;	
-					if (ga>1800) ga = 1800;
+					if (ga > 1500) ga = 1500;
 					
 					esc1 = ga - pid_output_roll_omega - pid_output_pitch_omega - pid_output_yaw_omega;   //MPU dat giua 2 truc
 					esc2 = ga - pid_output_roll_omega + pid_output_pitch_omega + pid_output_yaw_omega;
 					esc3 = ga + pid_output_roll_omega + pid_output_pitch_omega - pid_output_yaw_omega;
 					esc4 = ga + pid_output_roll_omega - pid_output_pitch_omega + pid_output_yaw_omega;
 					
-					if (esc1 < 1100) esc1 = 1100;                                                //Keep the motors running.
-					if (esc2 < 1100) esc2 = 1100;                                                //Keep the motors running.
-					if (esc3 < 1100) esc3 = 1100;                                                //Keep the motors running.
-					if (esc4 < 1100) esc4 = 1100;                                                //Keep the motors running.
+					if (esc1 < 1100) esc1 = 1100;                                                 //Keep the motors running.
+					if (esc2 < 1100) esc2 = 1100;                                                 //Keep the motors running.
+					if (esc3 < 1100) esc3 = 1100;                                                 //Keep the motors running.
+					if (esc4 < 1100) esc4 = 1100;                                                 //Keep the motors running.
 
-					if (esc1 > 1900)esc1 = 1900;                                                 //Limit the esc-1 pulse to 2000us.
-					if (esc2 > 1900)esc2 = 1900;                                                 //Limit the esc-2 pulse to 2000us.
-					if (esc3 > 1900)esc3 = 1900;                                                 //Limit the esc-3 pulse to 2000us.
-					if (esc4 > 1900)esc4 = 1900;                                                 //Limit the esc-4 pulse to 2000us.
+					if (esc1 > 1800) esc1 = 1800;                                                 //Limit the esc-1 pulse to 2000us.
+					if (esc2 > 1800) esc2 = 1800;                                                 //Limit the esc-2 pulse to 2000us.
+					if (esc3 > 1800) esc3 = 1800;                                                 //Limit the esc-3 pulse to 2000us.
+					if (esc4 > 1800) esc4 = 1800;                                                 //Limit the esc-4 pulse to 2000us.
 					
 				}
 			else 
@@ -375,6 +415,16 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 					esc4 = 1000;
 					
 				}
+#if AUTO_RUN
+		}
+		else {
+			Reset_PID();
+			esc1 = 1000;
+			esc2 = 1000;
+			esc3 = 1000;
+			esc4 = 1000;
+		}
+#endif
 
 	/*----Xuat PWM ra dong co -----*/
 		__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_1 , esc3 ); //PA0
@@ -382,8 +432,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_3 , esc2 ); //PA2
 		__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_4 , esc4 ); //PA3				
 
-		//__HAL_TIM_SetCounter(&htim2,19998);	//RESET Counter
-			}
+	}
+
 }
 
 /* USER CODE END 0 */
