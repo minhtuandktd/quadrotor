@@ -58,9 +58,7 @@
 
 
 
-#define		KP_ROLL_PITCH_OMEGA		0.6f //1.3f  //1.1
-#define		KI_ROLL_PITCH_OMEGA		0.001f  //0.0052f;
-#define		KD_ROLL_PITCH_OMEGA		5.0f  //12.6f;
+
 
 //Auto run parameter
 #define 	AUTO_RUN														0				//1 = on, 0 = off
@@ -72,9 +70,9 @@
 #define		KI_ROLL_PITCH												0.0f  
 #define		KD_ROLL_PITCH												0.0f 	
 							
-#define		KP_ROLL_PITCH_OMEGA									1.1f 		//1.3f  //1.1
+#define		KP_ROLL_PITCH_OMEGA									0.6 //1.1f 		//1.3f  
 #define		KI_ROLL_PITCH_OMEGA									0.001f  //0.0052f;
-#define		KD_ROLL_PITCH_OMEGA									12.0f 	//12.6f;
+#define		KD_ROLL_PITCH_OMEGA									5.0 //12.0f 	//12.6f;
 #define 	ROLL_PITCH_MAX_INTEGRAL							200.0f
 #define 	ROLL_PITCH_MAX_OUTPUT								400.0f
 
@@ -382,8 +380,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 				{
 					control_counter++;
 					
-					if (control_counter == 4){								//Change the compared value to change the speed of angle control loop
+					if (control_counter == 4)  //Change the compared value to change the speed of angle control loop
+					{								
 						PID_Controller_Angles();
+						control_counter = 0;
 					}
 					
 					PID_Controller_Omega();
