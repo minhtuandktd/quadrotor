@@ -425,7 +425,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_3 , esc2 ); //PA2
 		__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_4 , esc4 ); //PA3				
 
-		__HAL_TIM_SetCounter(&htim2, 19998);	//RESET Counter
+		//__HAL_TIM_SetCounter(&htim2, 19998);	//RESET Counter
 	}
 }
 
