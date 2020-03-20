@@ -199,9 +199,9 @@ void MPU9255_Get_Data(void)
 //	accel[1] = LPF(accel_raw[1], accel_raw_pre[1], LPF_cutoff_freq, 0.002);
 //	accel[2] = LPF(accel_raw[2], accel_raw_pre[2], LPF_cutoff_freq, 0.002);
 //	
-//	gyro[0] = LPF(gyro_raw[0], gyro_raw_pre[0], LPF_cutoff_freq, 0.002);
-//	gyro[1] = LPF(gyro_raw[1], gyro_raw_pre[1], LPF_cutoff_freq, 0.002);
-//	gyro[2] = LPF(gyro_raw[2], gyro_raw_pre[2], LPF_cutoff_freq, 0.002);
+	gyro[0] = LPF(gyro_raw[0], gyro_raw_pre[0], LPF_cutoff_freq, 0.002);
+	gyro[1] = LPF(gyro_raw[1], gyro_raw_pre[1], LPF_cutoff_freq, 0.002);
+	gyro[2] = LPF(gyro_raw[2], gyro_raw_pre[2], LPF_cutoff_freq, 0.002);
 //	
 //	mag[0] = LPF(mag_raw[0], mag_raw_pre[0], LPF_cutoff_freq, 0.002);
 //	mag[1] = LPF(mag_raw[1], mag_raw_pre[1], LPF_cutoff_freq, 0.002);
@@ -211,13 +211,18 @@ void MPU9255_Get_Data(void)
 //	accel_that[1] = accel[1]/2048.0;
 //	accel_that[2] = accel[2]/2048.0;
 
-	gyro_that[0] = 0.63*gyro_that[0] + 0.37*gyro[0]/131.072;
-	gyro_that[1] = 0.63*gyro_that[1] + 0.37*gyro[1]/131.072;
-	gyro_that[2] = 0.63*gyro_that[2] + 0.37*gyro[2]/131.072;
+//	gyro_that[0] = 0.63*gyro_that[0] + 0.37*gyro[0]/131.072;
+//	gyro_that[1] = 0.63*gyro_that[1] + 0.37*gyro[1]/131.072;
+//	gyro_that[2] = 0.63*gyro_that[2] + 0.37*gyro[2]/131.072;
 	
-//	gyro_raw_pre[0] = gyro[0];
-//	gyro_raw_pre[1] = gyro[1];
-//	gyro_raw_pre[2] = gyro[2];
+	gyro_raw_pre[0] = gyro[0];
+	gyro_raw_pre[1] = gyro[1];
+	gyro_raw_pre[2] = gyro[2];
+	
+	gyro_that[0] = gyro[0]/131.072;
+	gyro_that[1] = gyro[1]/131.072;
+	gyro_that[2] = gyro[2]/131.072;
+
 	
 }
 

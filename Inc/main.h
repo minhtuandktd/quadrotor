@@ -84,6 +84,8 @@ void Error_Handler(void);
 void PID_Controller_Angles(void);
 void PID_Controller_Omega(void);
 void Reset_PID(void);
+void Init_button_and_led(void);
+void Reset_PID(void);
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
