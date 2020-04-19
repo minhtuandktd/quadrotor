@@ -20,7 +20,7 @@ void adns_init(SPI_HandleTypeDef hspi){
 	HAL_SPI_Receive(&hspi, &pid, 1, 1);
 	DWT_Delay_us(1);
 	if (pid == 0x17){
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_SET);
 	}
 	ADNS_DISABLE
 	DWT_Delay_ms(1);

@@ -83,6 +83,7 @@ void Error_Handler(void);
 /* USER CODE BEGIN Private defines */
 void PID_Controller_Angles(void);
 void PID_Controller_Omega(void);
+void PID_hovering_controller(void);
 void Reset_PID(void);
 void Init_button_and_led(void);
 void Reset_PID(void);

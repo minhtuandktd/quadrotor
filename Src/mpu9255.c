@@ -1,5 +1,6 @@
 #include "mpu9255.h"
 #include "IMU.h"
+#include "dwt_stm32_delay.h"
 
 #define average_filter_value	100
 
@@ -241,7 +242,7 @@ void InitGyrOffset(void)
 		TempGx = TempGx + (int16_t)(mpu_rx[8]  << 8 | mpu_rx[9]) ;
 		TempGy = TempGy + (int16_t)(mpu_rx[10] << 8 | mpu_rx[11]) ;
 		TempGz = TempGz + (int16_t)(mpu_rx[12] << 8 | mpu_rx[13]) ;
-		HAL_Delay(20);
+		DWT_Delay_ms(20);
 		MPU9255_Get_Data();
 		IMU_GetYawPitchRoll();
 		//TempYaw = TempYaw + yaw;

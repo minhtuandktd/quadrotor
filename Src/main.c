@@ -43,7 +43,7 @@
 //User defined parameters
 #define		TX_CONTROLLER					1 				//1 = Use controller to start, 0 = Don't use controller
 #define		RUNNING_TIME					20				//Run time before auto stop on auto run mode
-#define		AUTO_RUN							1					//1 = Turn on auto run, 0 = Turn off auto run
+#define		AUTO_RUN							0					//1 = Turn on auto run, 0 = Turn off auto run
 #define 	YAW_CONTROLLER				1
 #define 	ALTITUDE_CONTROLLER		1
 
@@ -137,6 +137,29 @@ float pid_output_yaw_omega = 0, pid_error_temp_yaw_omega = 0, pid_i_mem_yaw_omeg
 float pid_max_yaw_omega = 200.0f;
 float pid_max_yaw_omega_integral = 100.0f;
 
+/*
+	hOVERING CONTROLLER VARIABLES
+*/
+uint8_t hovering_control_enable = 0;
+uint16_t pid_roll_setpoint_base = 0, pid_pitch_setpoint_base = 0;
+float pid_roll_setpoint = 0, pid_pitch_setpoint = 0;
+
+uint32_t position_x_error, position_y_error;
+uint32_t position_x_error_pre, position_y_error_pre;
+uint32_t position_x_setpoint = 0, position_y_setpoint = 0;
+float kp_position = 0.0f, ki_position = 0.0f, kd_position = 0.0f;
+float position_x_controller_integral = 0.0f, position_y_controller_integral = 0.0f;
+float position_x_controller_integral_max = 2.0f, position_y_controller_integral_max = 2.0f;
+float pid_roll_setpoint_max = 10.0f, pid_pitch_setpoint_max = 10.0f;
+
+/*
+	ALTITUDE CONTROLLER VARIABLES
+*/
+float altitude_setpoint;
+float altitude_error = 0.0f, altitude_error_pre = 0.0f, throttle_output = 0.0f, throttle_output_max = 1000.0f;
+float kp_altitude = 5.0f, ki_altitude = 1.0f, kd_altitude = 0.0f;
+float pid_altitude_integral, pid_altitude_integral_max = 1000.0f;
+
 //----------------------
 //extern TM_MPU6050_t	MPU6050_Data0;
 //extern TM_HMC_t			HMC_Data;
@@ -222,23 +245,49 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 		}
 }
 /* PID CONTROLLER */
-uint16_t pid_roll_setpoint_base = 0, pid_pitch_setpoint_base = 0;
-float pid_roll_setpoint = 0, pid_pitch_setpoint = 0;
+
+void PID_hovering_controller(void){
+	//X-axis controller
+	position_x_error = position_x_setpoint - m_position_x;
+	
+	position_x_controller_integral += ki_position * (float)position_x_error;
+	if (position_x_controller_integral > position_x_controller_integral_max) position_x_controller_integral = position_x_controller_integral_max;
+	else if (position_x_controller_integral > position_x_controller_integral_max * (-1)) position_x_controller_integral = position_x_controller_integral_max * (-1);
+	
+	pid_roll_setpoint = kp_position * position_x_error + position_x_controller_integral + kd_position * (position_x_error - position_x_error_pre);
+	
+	position_x_error_pre = position_x_error;
+	//Y-axis controller
+	position_y_error = position_y_setpoint - m_position_y;
+	
+	position_y_controller_integral += ki_position * (float)position_y_error;
+	if (position_y_controller_integral > position_y_controller_integral_max) position_y_controller_integral = position_y_controller_integral_max;
+	else if (position_y_controller_integral > position_y_controller_integral_max * (-1)) position_y_controller_integral = position_y_controller_integral_max * (-1);
+	
+	pid_roll_setpoint = kp_position * position_y_error + position_y_controller_integral + kd_position * (position_y_error - position_y_error_pre);
+	
+	position_y_error_pre = position_y_error;
+}
+
 void PID_Controller_Angles(void)
 {
 	pid_roll_setpoint_base = channel_1;                                              //Normally channel_1 is the pid_roll_setpoint input.
   pid_pitch_setpoint_base = channel_2;                                             //Normally channel_2 is the pid_pitch_setpoint input.
 
-	//We need a little dead band of 16us for better results. Channel_1 middle = 1485
-  if (pid_roll_setpoint_base > 1493) pid_roll_setpoint = pid_roll_setpoint_base - 1493;
-  else if (pid_roll_setpoint_base < 1477) pid_roll_setpoint = pid_roll_setpoint_base - 1477;
-	pid_roll_setpoint = pid_roll_setpoint/15;
-	
-	//We need a little dead band of 16us for better results. Channel_2 middle = 1520
-  if (pid_pitch_setpoint_base > 1528)pid_pitch_setpoint = pid_pitch_setpoint_base - 1528;
-  else if (pid_pitch_setpoint_base < 1512)pid_pitch_setpoint = pid_pitch_setpoint_base - 1512;
-	pid_pitch_setpoint = pid_pitch_setpoint/15;
-
+	if (hovering_control_enable == 0){
+		//We need a little dead band of 16us for better results. Channel_1 middle = 1485
+		if (pid_roll_setpoint_base > 1493) pid_roll_setpoint = pid_roll_setpoint_base - 1493;
+		else if (pid_roll_setpoint_base < 1477) pid_roll_setpoint = pid_roll_setpoint_base - 1477;
+		pid_roll_setpoint = pid_roll_setpoint/15;
+		
+		//We need a little dead band of 16us for better results. Channel_2 middle = 1520
+		if (pid_pitch_setpoint_base > 1528)pid_pitch_setpoint = pid_pitch_setpoint_base - 1528;
+		else if (pid_pitch_setpoint_base < 1512)pid_pitch_setpoint = pid_pitch_setpoint_base - 1512;
+		pid_pitch_setpoint = pid_pitch_setpoint/15;
+	}
+	else if (hovering_control_enable == 1){
+		PID_hovering_controller();
+	}
 	//Roll calculations///////////////////////////////////////////
 	pid_error_temp_roll = pid_roll_setpoint - roll ;
 			
@@ -356,12 +405,12 @@ void PID_Controller_Omega(void)
 
 }
 
-float altitude_error = 0.0f, altitude_error_pre = 0.0f, throttle_output = 0.0f, throttle_output_max = 1000.0f;
-float kp_altitude = 0.0f, ki_altitude = 0.0f, kd_altitude = 0.0f;
-float pid_altitude_integral, pid_altitude_integral_max;
-
 void PID_Controller_Altitude(void){
-	altitude_error = (channel_3 * 0.225f - 250.0f) - distance;
+	if (channel_3 >= 1200){
+		altitude_setpoint = (float)channel_3 * 0.225f - 250.0f;
+		altitude_error = altitude_setpoint - distance;
+	}
+	else altitude_setpoint = 0.0f;
 	
 	pid_altitude_integral += ki_altitude * altitude_error;
 	if (pid_altitude_integral > pid_altitude_integral_max) pid_altitude_integral = pid_altitude_integral_max;
@@ -373,7 +422,11 @@ void PID_Controller_Altitude(void){
 	
 	altitude_error_pre = altitude_error;
 }
-		
+/*
+	The controller for hovering mode
+	The correlation between x, y position and roll, pitch angles depends on our hardware setup
+*/
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -538,8 +591,8 @@ int main(void)
   /* USER CODE BEGIN 2 */
 	Init_button_and_led();
 	DWT_Delay_Init();
-//	MPU9255_Init();
-//	InitGyrOffset();
+	MPU9255_Init();
+	InitGyrOffset();
 	adns_init(hspi1);
 	
 	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
@@ -563,6 +616,7 @@ int main(void)
 //	yaw_setpoint = yaw_raw;
 //	while ((TIM1->CNT - control_delay) < 500) {};
 	HAL_TIM_Base_Start_IT(&htim3);
+	hovering_control_enable = 0;			//0 mean use TX to control the UAV, we need to set another channel to turn on or off this function in the future
 	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, GPIO_PIN_SET);
 	start = 1;
   
@@ -578,8 +632,8 @@ int main(void)
 		DWT_Delay_us(10);
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);		
 		
-		distance = (float)time * HCSR04_NUMBER; // * 1.226891;
-		
+		distance = (float)time * HCSR04_NUMBER; //Need an algorithm to adjust according to the yaw, pitch, roll angles
+		HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_15);
 			
 		DWT_Delay_ms(50);
     /* USER CODE END WHILE */

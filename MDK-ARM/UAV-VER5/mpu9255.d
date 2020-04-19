@@ -36,3 +36,4 @@ uav-ver5\mpu9255.o: ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim.h
 uav-ver5\mpu9255.o: ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim_ex.h
 uav-ver5\mpu9255.o: ../Inc/IMU.h
 uav-ver5\mpu9255.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\math.h
+uav-ver5\mpu9255.o: ../Inc/dwt_stm32_delay.h
