@@ -1,5 +1,5 @@
 # stm32 keil c build output
-**/UAV-VER5
+**/UAV-VER5/
 #for MDK-ARM IDE generated user files 
 *.uvgui*
 *.uvoptx

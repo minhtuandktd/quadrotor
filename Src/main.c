@@ -551,6 +551,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	}
 }
 
+float real_height = 0.0f;
+
 /* USER CODE END 0 */
 
 /**
@@ -633,6 +635,7 @@ int main(void)
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);		
 		
 		distance = (float)time * HCSR04_NUMBER; //Need an algorithm to adjust according to the yaw, pitch, roll angles
+		real_height = distance * cosf(roll * 3.14f/180.0f) * cosf(pitch * 3.14f/180.0f);
 		HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_15);
 			
 		DWT_Delay_ms(50);
