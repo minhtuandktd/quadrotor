@@ -45,7 +45,7 @@
 /* USER CODE BEGIN Includes */
 #include "mpu9255.h"
 #include "IMU.h"
-
+#include "px4flow.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -76,6 +76,8 @@
 #define 	ROLL_PITCH_MAX_INTEGRAL							200.0f
 #define 	ROLL_PITCH_MAX_OUTPUT								400.0f
 
+//Altitude controller parameters
+#define 	ALTITUDE_CONTROLLER									1
 
 /* USER CODE END PD */
 
@@ -86,6 +88,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
+I2C_HandleTypeDef hi2c2;
 
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
@@ -151,6 +154,15 @@ float pid_output_yaw_omega = 0, pid_error_temp_yaw_omega = 0, pid_i_mem_yaw_omeg
 float pid_max_yaw_omega = 60.0f;
 float pid_max_yaw_omega_integral = 40.0f;
 
+/*
+	ALTITUDE CONTROLLER VARIABLES
+*/
+float altitude_setpoint;
+float altitude_error = 0.0f, altitude_error_pre = 0.0f, throttle_output = 0.0f, throttle_output_max = 1000.0f;
+float kp_altitude = 5.0f, ki_altitude = 1.0f, kd_altitude = 0.0f;
+float pid_altitude_integral, pid_altitude_integral_max = 1000.0f;
+float distance = 0.0f;
+uint8_t altitude_controller_counter = 0;
 //----------------------
 
 
@@ -166,6 +178,7 @@ static void MX_I2C1_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_TIM3_Init(void);
+static void MX_I2C2_Init(void);
 /* USER CODE BEGIN PFP */
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 {
@@ -220,20 +233,31 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 		}
 }
 /* PID CONTROLLER */
+uint8_t hovering_controller = 0;
+uint32_t auto_run_counter_temp = 0, auto_run_counter = 0;
+uint8_t control_counter = 0;
+uint8_t hover_controller_counter = 0;
+float hovering_roll_setpoint = 0.0f, hovering_pitch_setpoint = 0.0f;
+
 void PID_Controller_Angles(void)
 {
-	pid_roll_setpoint_base = channel_1;                                              //Normally channel_1 is the pid_roll_setpoint input.
-  pid_pitch_setpoint_base = channel_2;                                             //Normally channel_2 is the pid_pitch_setpoint input.
-	//We need a little dead band of 16us for better results. Channel_1 middle = 1485
-  if (pid_roll_setpoint_base > 1493) pid_roll_setpoint = pid_roll_setpoint_base - 1493;
-  else if (pid_roll_setpoint_base < 1477) pid_roll_setpoint = pid_roll_setpoint_base - 1477;
-	pid_roll_setpoint = pid_roll_setpoint/15;
-	
-	//We need a little dead band of 16us for better results. Channel_2 middle = 1520
-  if (pid_pitch_setpoint_base > 1528)pid_pitch_setpoint = pid_pitch_setpoint_base - 1528;
-  else if (pid_pitch_setpoint_base < 1512)pid_pitch_setpoint = pid_pitch_setpoint_base - 1512;
-	pid_pitch_setpoint = pid_pitch_setpoint/15;
-	
+	if (hovering_controller == 0){
+		pid_roll_setpoint_base = channel_1;                                              //Normally channel_1 is the pid_roll_setpoint input.
+		pid_pitch_setpoint_base = channel_2;                                             //Normally channel_2 is the pid_pitch_setpoint input.
+		//We need a little dead band of 16us for better results. Channel_1 middle = 1485
+		if (pid_roll_setpoint_base > 1493) pid_roll_setpoint = pid_roll_setpoint_base - 1493;
+		else if (pid_roll_setpoint_base < 1477) pid_roll_setpoint = pid_roll_setpoint_base - 1477;
+		pid_roll_setpoint = pid_roll_setpoint/15;
+		
+		//We need a little dead band of 16us for better results. Channel_2 middle = 1520
+		if (pid_pitch_setpoint_base > 1528)pid_pitch_setpoint = pid_pitch_setpoint_base - 1528;
+		else if (pid_pitch_setpoint_base < 1512)pid_pitch_setpoint = pid_pitch_setpoint_base - 1512;
+		pid_pitch_setpoint = pid_pitch_setpoint/15;
+	}
+	else if (hovering_controller == 1){
+		pid_roll_setpoint = hovering_roll_setpoint;
+		pid_pitch_setpoint = hovering_pitch_setpoint;
+	}
 	//Roll calculations///////////////////////////////////////////
 	pid_error_temp_roll = pid_roll_setpoint - roll + 1.82f ;
 			
@@ -342,6 +366,25 @@ void PID_Controller_Omega(void)
 	
 	pid_last_yaw_d_error_omega = pid_error_temp_yaw_omega;
 }
+
+void PID_Controller_Altitude(uint16_t channel_3, float distance){
+	if (channel_3 >= 1200){
+		altitude_setpoint = (float)channel_3 * 0.225f - 250.0f;
+		altitude_error = altitude_setpoint - distance;
+	}
+	else altitude_setpoint = 0.0f;
+	
+	pid_altitude_integral += ki_altitude * altitude_error;
+	if (pid_altitude_integral > pid_altitude_integral_max) pid_altitude_integral = pid_altitude_integral_max;
+	else if (pid_altitude_integral < pid_altitude_integral_max * (-1)) pid_altitude_integral = pid_altitude_integral_max * (-1);
+	
+	throttle_output = kp_altitude * altitude_error + pid_altitude_integral + kd_altitude * (altitude_error - altitude_error_pre);
+	if (throttle_output > throttle_output_max) throttle_output = throttle_output_max;
+	else if (throttle_output < 0) throttle_output = 0.0f;
+	
+	altitude_error_pre = altitude_error;
+}
+
 void Reset_PID(void)
 {
 	pid_i_mem_roll_omega = pid_i_mem_pitch_omega = pid_i_mem_yaw_omega = 0.0f;
@@ -352,9 +395,6 @@ void Reset_PID(void)
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-uint32_t auto_run_counter_temp = 0, auto_run_counter = 0;
-uint8_t control_counter = 0;
-
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
 	if(htim->Instance == TIM3)
@@ -383,12 +423,31 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 					if (control_counter == 4)  //Change the compared value to change the speed of angle control loop
 					{								
 						PID_Controller_Angles();
+						hover_controller_counter++;
+						if (hover_controller_counter == 3){
+							hover_controller_counter = 0;
+							PX4Flow_get_angle_setpoint(&hovering_roll_setpoint, &hovering_pitch_setpoint);
+							altitude_controller_counter++;
+							if (altitude_controller_counter == 2){
+								altitude_controller_counter = 0;
+								distance = PX4Flow_get_distance();
+								PID_Controller_Altitude(channel_3, distance);
+							}
+						}
 						control_counter = 0;
 					}
 					
 					PID_Controller_Omega();
+					
+#if ALTITUDE_CONTROLLER
+					if (channel_3 >= 1200){
+						ga = 1000 + throttle_output;
+					}
+					else ga = 1000;
+#else					
 					ga = channel_3 ;	
 					if (ga > 1500) ga = 1500;
+#endif
 					
 					esc1 = ga - pid_output_roll_omega - pid_output_pitch_omega - pid_output_yaw_omega;   //MPU dat giua 2 truc
 					esc2 = ga - pid_output_roll_omega + pid_output_pitch_omega + pid_output_yaw_omega;
@@ -427,6 +486,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 #endif
 
 	/*----Xuat PWM ra dong co -----*/
+	//Used only for testing	
+//		esc1 = 1000;
+//		esc2 = 1000;
+//		esc3 = 1000;
+//		esc4 = 1000;		
+	//Used only for testing
 		__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_1 , esc3 ); //PA0
 		__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_2 , esc1 ); //PA1
 		__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_3 , esc2 ); //PA2
@@ -470,10 +535,11 @@ int main(void)
   MX_TIM1_Init();
   MX_TIM2_Init();
   MX_TIM3_Init();
+  MX_I2C2_Init();
   /* USER CODE BEGIN 2 */
 	MPU9255_Init();
 	InitGyrOffset();
-	
+	PX4Flow_Init();
 	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
 	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
 	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
@@ -517,11 +583,11 @@ void SystemClock_Config(void)
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
-  /**Configure the main internal regulator output voltage 
+  /** Configure the main internal regulator output voltage 
   */
   __HAL_RCC_PWR_CLK_ENABLE();
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
-  /**Initializes the CPU, AHB and APB busses clocks 
+  /** Initializes the CPU, AHB and APB busses clocks 
   */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
@@ -535,7 +601,7 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  /**Initializes the CPU, AHB and APB busses clocks 
+  /** Initializes the CPU, AHB and APB busses clocks 
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
@@ -585,6 +651,40 @@ static void MX_I2C1_Init(void)
 }
 
 /**
+  * @brief I2C2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C2_Init(void)
+{
+
+  /* USER CODE BEGIN I2C2_Init 0 */
+
+  /* USER CODE END I2C2_Init 0 */
+
+  /* USER CODE BEGIN I2C2_Init 1 */
+
+  /* USER CODE END I2C2_Init 1 */
+  hi2c2.Instance = I2C2;
+  hi2c2.Init.ClockSpeed = 400000;
+  hi2c2.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c2.Init.OwnAddress1 = 0;
+  hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c2.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c2.Init.OwnAddress2 = 0;
+  hi2c2.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c2.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C2_Init 2 */
+
+  /* USER CODE END I2C2_Init 2 */
+
+}
+
+/**
   * @brief TIM1 Initialization Function
   * @param None
   * @retval None
@@ -609,6 +709,7 @@ static void MX_TIM1_Init(void)
   htim1.Init.Period = 29999;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
   {
     Error_Handler();
@@ -678,6 +779,7 @@ static void MX_TIM2_Init(void)
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim2.Init.Period = 19999;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
   {
     Error_Handler();
@@ -747,6 +849,7 @@ static void MX_TIM3_Init(void)
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim3.Init.Period = 3999;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
   {
     Error_Handler();
@@ -781,8 +884,8 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOE_CLK_ENABLE();
-  __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_15, GPIO_PIN_RESET);
