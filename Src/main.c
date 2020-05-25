@@ -70,11 +70,11 @@
 #define		KI_ROLL_PITCH												0.0f  
 #define		KD_ROLL_PITCH												0.0f 	
 							
-#define		KP_ROLL_PITCH_OMEGA									0.6 //1.1f 		//1.3f  
+#define		KP_ROLL_PITCH_OMEGA									0.46 //1.1f 		//1.3f  
 #define		KI_ROLL_PITCH_OMEGA									0.001f  //0.0052f;
 #define		KD_ROLL_PITCH_OMEGA									5.0 //12.0f 	//12.6f;
-#define 	ROLL_PITCH_MAX_INTEGRAL							200.0f
-#define 	ROLL_PITCH_MAX_OUTPUT								400.0f
+#define 	ROLL_PITCH_MAX_INTEGRAL							200.0f  
+#define 	ROLL_PITCH_MAX_OUTPUT								350.0f  
 
 
 /* USER CODE END PD */
@@ -110,7 +110,7 @@ double kp_roll = KP_ROLL_PITCH;
 double ki_roll = KI_ROLL_PITCH;
 double kd_roll = KD_ROLL_PITCH;
 float pid_output_roll = 0, pid_error_temp_roll = 0, pid_i_mem_roll = 0, pid_last_roll_d_error =0 ;
-float pid_max_roll = 250.0f ;//25
+float pid_max_roll = 300.0f ;//25
 
 float pid_output_roll_omega = 0, pid_error_temp_roll_omega = 0, pid_i_mem_roll_omega = 0, pid_last_roll_d_error_omega = 0 ;
 double kp_roll_omega = KP_ROLL_PITCH_OMEGA;
@@ -125,7 +125,7 @@ double kp_pitch = KP_ROLL_PITCH;
 double ki_pitch = KI_ROLL_PITCH;  
 double kd_pitch = KD_ROLL_PITCH;   
 float pid_output_pitch = 0, pid_error_temp_pitch = 0, pid_i_mem_pitch = 0, pid_last_pitch_d_error = 0 ;
-float pid_max_pitch = 250.0f ;
+float pid_max_pitch = 300.0f ;
 
 double kp_pitch_omega = KP_ROLL_PITCH_OMEGA;     
 double ki_pitch_omega = KI_ROLL_PITCH_OMEGA;  
@@ -144,12 +144,12 @@ double kd_yaw = 0;
 float pid_output_yaw = 0, pid_error_temp_yaw = 0, pid_i_mem_yaw = 0, pid_last_yaw_d_error = 0;
 float pid_max_yaw = 100;
 
-double kp_yaw_omega = 4.0f;
+double kp_yaw_omega = 7.0f;
 double ki_yaw_omega = 0.02f;
 double kd_yaw_omega = 0.0f;
 float pid_output_yaw_omega = 0, pid_error_temp_yaw_omega = 0, pid_i_mem_yaw_omega = 0, pid_last_yaw_d_error_omega = 0;
-float pid_max_yaw_omega = 60.0f;
-float pid_max_yaw_omega_integral = 40.0f;
+float pid_max_yaw_omega = 150.0f;
+float pid_max_yaw_omega_integral = 50.0f;
 
 //----------------------
 
@@ -235,7 +235,7 @@ void PID_Controller_Angles(void)
 	pid_pitch_setpoint = pid_pitch_setpoint/15;
 	
 	//Roll calculations///////////////////////////////////////////
-	pid_error_temp_roll = pid_roll_setpoint - roll + 1.82f ;
+	pid_error_temp_roll = pid_roll_setpoint - roll + 1.47f ;
 			
 	pid_i_mem_roll += ki_roll * pid_error_temp_roll;
 	
@@ -252,7 +252,7 @@ void PID_Controller_Angles(void)
 	pid_last_roll_d_error = pid_error_temp_roll;
 	
 	//Pitch calculations///////////////////////////////////////////
-	pid_error_temp_pitch = pid_pitch_setpoint - pitch - 0.77f;
+	pid_error_temp_pitch = pid_pitch_setpoint - pitch - 0.70f;
 	
 	pid_i_mem_pitch += ki_pitch * pid_error_temp_pitch;
 	
@@ -388,7 +388,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 					
 					PID_Controller_Omega();
 					ga = channel_3 ;	
-					if (ga > 1500) ga = 1500;
+					if (ga > 1800) ga = 1800;
 					
 					esc1 = ga - pid_output_roll_omega - pid_output_pitch_omega - pid_output_yaw_omega;   //MPU dat giua 2 truc
 					esc2 = ga - pid_output_roll_omega + pid_output_pitch_omega + pid_output_yaw_omega;
