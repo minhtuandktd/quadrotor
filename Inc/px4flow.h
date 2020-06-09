@@ -9,10 +9,10 @@
 
 #define PX4_DEVICE_ADDRESS  0x42
 #define DELTA_SONAR_SIZE 5
-#define PX4FLOW_VEL_SIZE 8
+#define PX4FLOW_VEL_SIZE 13
 #define DELTA_PX4FLOWVEL_SIZE 5
 #define PX4FLOW_PID_D_BUFFER_SIZE 10
-#define POS_CONTROLLER_T 10
+#define POS_CONTROLLER_T 5
 
 struct px4_i2c_integral_frame
 {
