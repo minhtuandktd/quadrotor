@@ -9,7 +9,7 @@
 */
 struct px4_i2c_integral_frame iframe;
 extern I2C_HandleTypeDef hi2c2;
-extern float yaw;
+extern float yaw, pitch, roll;
 
 uint8_t data_integral[26];
 float pixel_x, pixel_y;
@@ -82,6 +82,8 @@ uint8_t delta_sonar_cnt = 0;
 float flowScaler_x = 0.0f, flowScaler_y = 0.0f;
 float flowScaleFactorX, flowScaleFactorY;
 float pid_poshold_max;
+float w_cos_yaw, w_sin_yaw;
+float delta_x = 0.0f, delta_y = 0.0f;
 
 void PX4Flow_Init(void){
     flowScaleFactorX = 1.0f + 0.001f * flowScaler_x;
@@ -92,8 +94,9 @@ void PX4Flow_Init(void){
 		kp_hovering = 0.20588f;
 		ki_hovering = 0.05f;
 		kd_hovering = 0.02735f;
+		px = py = 0.0f;
 }
-
+float real_ground_distance;
 void PX4Flow_get_data(void){
   gyro_x_rate = iframe.gyro_x_rate_integral / 10.0f; // mrad
   gyro_y_rate = iframe.gyro_y_rate_integral / 10.0f; // mrad
@@ -108,7 +111,9 @@ void PX4Flow_get_data(void){
 
   real_delta_sonar = average_filter(delta_sonar_buffer, DELTA_SONAR_SIZE, pre_ground_distance_cm - ground_distance_cm, & delta_sonar_cnt);
   pre_ground_distance_cm = ground_distance_cm;
-
+	
+	real_ground_distance = ground_distance_cm * cos(roll * M_PI/180.0f) * cos(pitch * M_PI/180.0f);
+	
   if (quality > 150) {
     // Update flow rate with gyro rate
     pixel_x = flow_x - gyro_x_rate; // mrad
@@ -116,8 +121,8 @@ void PX4Flow_get_data(void){
     // Scale based on ground distance and compute speed
     // (flow/1000) * (ground_distance/1000) / (timespan/1000000)
     // velocity in body frame
-    velocity_x = pixel_x * ground_distance_cm * 10.0f / timespan; // m/s
-    velocity_y = pixel_y * ground_distance_cm * 10.0f / timespan; // m/s 
+    velocity_x = pixel_x * real_ground_distance * 10.0f / timespan; // m/s
+    velocity_y = pixel_y * real_ground_distance * 10.0f / timespan; // m/s 
     vel_x_avr = average_filter(vel_x_buffer, PX4FLOW_VEL_SIZE, velocity_x, & vel_x_cnt);
     vel_y_avr = average_filter(vel_y_buffer, PX4FLOW_VEL_SIZE, velocity_y, & vel_y_cnt);
     yaw_px4flow = calculate_relative_yaw(yaw, yaw_px4flow_offset);
@@ -127,6 +132,8 @@ void PX4Flow_get_data(void){
 		double cos_yaw, sin_yaw;
     cos_yaw = cos(yaw_px4flow * DEG_TO_RAD);
     sin_yaw = sin(yaw_px4flow * DEG_TO_RAD);
+		w_cos_yaw = cos_yaw;
+		w_sin_yaw = sin_yaw;
     // choose velocity for calculate px,py and pid position
     vel_x_vip = vel_x_avr;
     vel_y_vip = vel_y_avr;
@@ -138,9 +145,10 @@ void PX4Flow_get_data(void){
     vel_x_original_frame = (-vel_x_vip) * cos_yaw + vel_y_vip * sin_yaw;
     vel_y_original_frame = -(-vel_x_vip) * sin_yaw + vel_y_vip * cos_yaw;
     vel_x_original_frame = -vel_x_original_frame;
-    // Integrate velocity to get pose estimate. dt in mili second			
-    px = px + vel_x_original_frame * timespan * 0.001f;  //mili meter
-    py = py + vel_y_original_frame * timespan * 0.001f;
+    // Integrate velocity to get pose estimate. dt in mili second
+
+    px = px + vel_x_original_frame * (float)timespan * 0.001f; // mili m 
+    py = py + vel_y_original_frame * (float)timespan * 0.001f;
     // convert px,py in original frame to body frame
     px_bf = (-px) * cos_yaw + py * sin_yaw;
     py_bf = -(-px) * sin_yaw + py * cos_yaw;
@@ -149,7 +157,7 @@ void PX4Flow_get_data(void){
 	
   if (slow_ctrler_cnt == (POS_CONTROLLER_T - 1)){
     slow_ctrler_cnt = 0;
-		PX4Flow_get_sp_vel(&vx_sp, &vy_sp, px, py);
+		PX4Flow_get_sp_vel(&vx_sp, &vy_sp, 0.0f, py);
   }
   slow_ctrler_cnt++;
 	
@@ -228,9 +236,9 @@ void px4flow_position_pid(float vx_setpoint, float vy_setpoint, float vx_input, 
   float temp_pid_rx_2;
   temp_pid_rx_2 = temp_pid_rx  * invSqrt(1.0f - temp_pid_ry * temp_pid_ry);
   //	temp_pid_rx_2 = temp_pid_rx_2*;
-  angle_compensate_roll = safe_asin(temp_pid_rx_2) * RAD_TO_DEG;
+  angle_compensate_roll = -safe_asin(temp_pid_rx_2) * RAD_TO_DEG;
   angle_compensate_pitch = safe_asin(temp_pid_ry) * RAD_TO_DEG;
-
+	
 //   pidvelocity_x_rc.pout = px4flow_pid_to_rc(velpid_x_p);
 //   pidvelocity_x_rc.dout = px4flow_pid_to_rc(px4flow_pid_avr_dx);
 //   pidvelocity_x_rc.iout = px4flow_pid_to_rc(velpid_x_i);
@@ -299,8 +307,8 @@ void PX4Flow_get_angle_setpoint(float* roll_sp, float* pitch_sp){
 	test_counter++;
 	PX4Flow_update_integral();
 	PX4Flow_get_data();
-	*roll_sp = pid_px;
-	*pitch_sp = pid_py;
+	*roll_sp = lpf_pid_px_out;
+	*pitch_sp = lpf_pid_py_out;
 }
 
 void PX4Flow_get_sp_vel(float * v_out_x, float * v_out_y, float px_pf, float py_pf){

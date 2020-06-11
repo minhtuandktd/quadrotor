@@ -416,21 +416,21 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 			}
 #endif
 			
-			if ( channel_5 > 1500)
-				{
+//			if ( channel_5 > 1500)
+//				{
 					control_counter++;
 					
 					if (control_counter == 4)  //Change the compared value to change the speed of angle control loop
 					{								
 						PID_Controller_Angles();
 						hover_controller_counter++;
-						if (hover_controller_counter == 3){
+						if (hover_controller_counter == 3		){
 							hover_controller_counter = 0;
 							PX4Flow_get_angle_setpoint(&hovering_roll_setpoint, &hovering_pitch_setpoint);
 							altitude_controller_counter++;
 							if (altitude_controller_counter == 2){
 								altitude_controller_counter = 0;
-								distance = PX4Flow_get_distance();
+								distance = PX4Flow_get_distance() * cos(roll * M_PI/180.0f) * cos(pitch * M_PI/180.0f);
 								PID_Controller_Altitude(channel_3, distance);
 							}
 						}
@@ -464,16 +464,16 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 					if (esc3 > 1800) esc3 = 1800;                                                 //Limit the esc-3 pulse to 2000us.
 					if (esc4 > 1800) esc4 = 1800;                                                 //Limit the esc-4 pulse to 2000us.
 					
-				}
-			else 
-				{
-					Reset_PID();
-					esc1 = 1000;
-					esc2 = 1000;
-					esc3 = 1000;
-					esc4 = 1000;
-					
-				}
+//				}
+//			else 
+//				{
+//					Reset_PID();
+//					esc1 = 1000;
+//					esc2 = 1000;
+//					esc3 = 1000;
+//					esc4 = 1000;
+//					
+//				}
 #if AUTO_RUN
 		}
 		else {
@@ -487,10 +487,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
 	/*----Xuat PWM ra dong co -----*/
 	//Used only for testing	
-//		esc1 = 1000;
-//		esc2 = 1000;
-//		esc3 = 1000;
-//		esc4 = 1000;		
+		esc1 = 1000;
+		esc2 = 1000;
+		esc3 = 1000;
+		esc4 = 1000;		
 	//Used only for testing
 		__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_1 , esc3 ); //PA0
 		__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_2 , esc1 ); //PA1
@@ -559,7 +559,13 @@ int main(void)
 	HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_4);
 	HAL_TIM_Base_Start_IT(&htim3);
 	
-	 
+	/*
+		Set this variable equal to 1 if u want to active hovering controller
+		We need to use another channel to active this if we want in the future
+		Or make it always enable when the UAV set off
+	*/
+	hovering_controller = 1; 
+	
   /* USER CODE END 2 */
 
   /* Infinite loop */
