@@ -96,7 +96,9 @@ void PX4Flow_Init(void){
 		kd_hovering = 0.02735f;
 		px = py = 0.0f;
 }
-float real_ground_distance;
+
+float real_ground_distance, ground_distance_filtered;
+
 void PX4Flow_get_data(void){
   gyro_x_rate = iframe.gyro_x_rate_integral / 10.0f; // mrad
   gyro_y_rate = iframe.gyro_y_rate_integral / 10.0f; // mrad
@@ -112,7 +114,8 @@ void PX4Flow_get_data(void){
   real_delta_sonar = average_filter(delta_sonar_buffer, DELTA_SONAR_SIZE, pre_ground_distance_cm - ground_distance_cm, & delta_sonar_cnt);
   pre_ground_distance_cm = ground_distance_cm;
 	
-	real_ground_distance = ground_distance_cm * cos(roll * M_PI/180.0f) * cos(pitch * M_PI/180.0f);
+	ground_distance_filtered = LPF(ground_distance_cm, pre_ground_distance_cm, 30, 0.048);
+	real_ground_distance = ground_distance_filtered * cos(roll * M_PI/180.0f) * cos(pitch * M_PI/180.0f);
 	
   if (quality > 150) {
     // Update flow rate with gyro rate
