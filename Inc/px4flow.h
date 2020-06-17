@@ -9,6 +9,7 @@
 
 #define PX4_DEVICE_ADDRESS  0x42
 #define DELTA_SONAR_SIZE 5
+#define DELTA_SONAR_DISTANCE 5
 #define PX4FLOW_VEL_SIZE 13
 #define DELTA_PX4FLOWVEL_SIZE 5
 #define PX4FLOW_PID_D_BUFFER_SIZE 10
@@ -41,6 +42,6 @@ float Math_fConstrain(float value, float min, float max);
 float invSqrt(float x);
 float safe_asin(float v);
 void PX4Flow_get_angle_setpoint(float* roll_sp, float* pitch_sp);
-void PX4Flow_get_sp_vel(float * v_out_x, float * v_out_y, float px_pf, float py_pf);
+void PX4Flow_get_sp_vel(float * v_out_x, float * v_out_y, float px_pf, float py_pf, float px_sp, float py_sp);
 float PX4Flow_get_distance(void);
 #endif

@@ -104,7 +104,7 @@ volatile uint16_t esc1 = 1000, esc2 = 1000 , esc3 = 1000, esc4 = 1000; // Cap PW
 volatile float esc1_f = 0, esc2_f = 0, esc3_f =0, esc4_f =0, ga_f = 0;
 extern uint8_t buffer3[21];
 extern float roll, pitch, yaw, yaw_raw;
-float yaw_setpoint = 0.0f;
+float yaw_setpoint = 130.0f;
 extern float gyro_that[3];
 
 /////////////////PID CONSTANTS/////////////////
@@ -141,26 +141,28 @@ float pid_max_pitch_omega = ROLL_PITCH_MAX_OUTPUT ;
 /*----------YAW------------*/
 float yaw_offset = 0, yaw_offset_tmp = 0;
 uint8_t i_yaw = 0;
-double kp_yaw = 0;
-double ki_yaw = 0;
+double kp_yaw = 1.0f;
+double ki_yaw = 0.0f;
 double kd_yaw = 0;
 float pid_output_yaw = 0, pid_error_temp_yaw = 0, pid_i_mem_yaw = 0, pid_last_yaw_d_error = 0;
-float pid_max_yaw = 100;
+float pid_max_yaw = 100.0f;
 
-double kp_yaw_omega = 7.0f;
-double ki_yaw_omega = 0.02f;
-double kd_yaw_omega = 0.0f;
+//double kp_yaw_omega = 7.0f;
+double kp_yaw_omega = 3.0f;
+double ki_yaw_omega = 0.01f;
+double kd_yaw_omega = 1.0f;
 float pid_output_yaw_omega = 0, pid_error_temp_yaw_omega = 0, pid_i_mem_yaw_omega = 0, pid_last_yaw_d_error_omega = 0;
-float pid_max_yaw_omega = 150.0f;
+float pid_max_yaw_omega = 200.0f;
 float pid_max_yaw_omega_integral = 50.0f;
 
 /*
 	ALTITUDE CONTROLLER VARIABLES
 */
 float altitude_setpoint;
-float altitude_error = 0.0f, altitude_error_pre = 0.0f, throttle_output = 0.0f, throttle_output_max = 1000.0f;
-float kp_altitude = 5.0f, ki_altitude = 1.0f, kd_altitude = 0.0f;
-float pid_altitude_integral, pid_altitude_integral_max = 1000.0f;
+float altitude_error = 0.0f, altitude_error_pre = 0.0f, throttle_output = 0.0f, throttle_output_max = 275.0f;
+//float kp_altitude = 0.5f, ki_altitude = 0.5f, kd_altitude = 10.0f;
+float kp_altitude = 5.0f, ki_altitude = 0.1f, kd_altitude = 0.4f;
+float pid_altitude_integral, pid_altitude_integral_max = 200.0f;
 float distance = 0.0f;
 uint8_t altitude_controller_counter = 0;
 //----------------------
@@ -238,6 +240,7 @@ uint32_t auto_run_counter_temp = 0, auto_run_counter = 0;
 uint8_t control_counter = 0;
 uint8_t hover_controller_counter = 0;
 float hovering_roll_setpoint = 0.0f, hovering_pitch_setpoint = 0.0f;
+float px_setpoint, py_setpoint;
 
 void PID_Controller_Angles(void)
 {
@@ -255,6 +258,17 @@ void PID_Controller_Angles(void)
 		pid_pitch_setpoint = pid_pitch_setpoint/15;
 	}
 	else if (hovering_controller == 1){
+		
+		pid_roll_setpoint_base = channel_1;                                              //Normally channel_1 is the pid_roll_setpoint input.
+		pid_pitch_setpoint_base = channel_2;                                             //Normally channel_2 is the pid_pitch_setpoint input.
+		
+		if (pid_roll_setpoint_base > 1600) py_setpoint = py_setpoint - 5.0f;
+		else if (pid_roll_setpoint_base < 1400) py_setpoint = py_setpoint + 5.0f;
+		
+		//We need a little dead band of 16us for better results. Channel_2 middle = 1520
+		if (pid_pitch_setpoint_base > 1600) px_setpoint = px_setpoint - 5.0f;
+		else if (pid_pitch_setpoint_base < 1400) px_setpoint = px_setpoint + 5.0f;		
+		
 		pid_roll_setpoint = hovering_roll_setpoint;
 		pid_pitch_setpoint = hovering_pitch_setpoint;
 	}
@@ -293,19 +307,19 @@ void PID_Controller_Angles(void)
 	pid_last_pitch_d_error = pid_error_temp_pitch;
 	
 	//Yaw calculations/////////////////////////////////////////////
-//	pid_error_temp_yaw = yaw_setpoint - yaw  ;
-//	
-//	pid_i_mem_yaw += ki_yaw*pid_error_temp_yaw;
-//	
-//	if (pid_i_mem_yaw > pid_max_yaw) pid_i_mem_yaw = pid_max_yaw;
-//	else if (pid_i_mem_yaw < pid_max_yaw*(-1)) pid_i_mem_yaw = pid_max_yaw*(-1);
-//	
-//	pid_output_yaw = kp_yaw*pid_error_temp_yaw + pid_i_mem_yaw + (-kd_yaw)*(pid_error_temp_yaw - pid_last_yaw_d_error);
-//	
-//	if (pid_output_yaw > pid_max_yaw) pid_output_yaw = pid_max_yaw;
-//	else if (pid_output_yaw < pid_max_yaw*(-1)) pid_output_yaw = pid_max_yaw*(-1);
-//	
-//	pid_last_yaw_d_error = pid_error_temp_yaw;
+	pid_error_temp_yaw = -(yaw_setpoint - yaw)  ;
+	
+	pid_i_mem_yaw += ki_yaw*pid_error_temp_yaw;
+	
+	if (pid_i_mem_yaw > pid_max_yaw) pid_i_mem_yaw = pid_max_yaw;
+	else if (pid_i_mem_yaw < pid_max_yaw*(-1)) pid_i_mem_yaw = pid_max_yaw*(-1);
+	
+	pid_output_yaw = kp_yaw*pid_error_temp_yaw + pid_i_mem_yaw + (-kd_yaw)*(pid_error_temp_yaw - pid_last_yaw_d_error);
+	
+	if (pid_output_yaw > pid_max_yaw) pid_output_yaw = pid_max_yaw;
+	else if (pid_output_yaw < pid_max_yaw*(-1)) pid_output_yaw = pid_max_yaw*(-1);
+	
+	pid_last_yaw_d_error = pid_error_temp_yaw;
 
 
 
@@ -352,7 +366,7 @@ void PID_Controller_Omega(void)
 	//Omega yaw calculation//////////////////////////////////////////
 	//pid_error_temp_yaw_omega = pid_output_yaw - gyro_that[2];
 	
-	pid_error_temp_yaw_omega = 0 - gyro_that[2];
+	pid_error_temp_yaw_omega = (0.0f - gyro_that[2]);
 	
 	pid_i_mem_yaw_omega += ki_yaw_omega * pid_error_temp_yaw_omega;
 	
@@ -368,8 +382,9 @@ void PID_Controller_Omega(void)
 }
 
 void PID_Controller_Altitude(uint16_t channel_3, float distance){
-	if (channel_3 >= 1200){
-		altitude_setpoint = (float)channel_3 * 0.225f - 250.0f;
+	if (channel_3 >= 1000){
+		altitude_setpoint = (int)((float)channel_3 * 0.15f - 150.0f);
+		//altitude_setpoint = 75.0f;
 		altitude_error = altitude_setpoint - distance;
 	}
 	else altitude_setpoint = 0.0f;
@@ -380,7 +395,7 @@ void PID_Controller_Altitude(uint16_t channel_3, float distance){
 	
 	throttle_output = kp_altitude * altitude_error + pid_altitude_integral + kd_altitude * (altitude_error - altitude_error_pre);
 	if (throttle_output > throttle_output_max) throttle_output = throttle_output_max;
-	else if (throttle_output < 0) throttle_output = 0.0f;
+	else if (throttle_output < -200.0f) throttle_output = -200.0f;
 	
 	altitude_error_pre = altitude_error;
 }
@@ -416,8 +431,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 			}
 #endif
 			
-//			if ( channel_5 > 1500)
-//				{
+			if ( channel_5 > 1500)
+				{
 					control_counter++;
 					
 					if (control_counter == 4)  //Change the compared value to change the speed of angle control loop
@@ -430,7 +445,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 							altitude_controller_counter++;
 							if (altitude_controller_counter == 2){
 								altitude_controller_counter = 0;
-								distance = PX4Flow_get_distance() * cos(roll * M_PI/180.0f) * cos(pitch * M_PI/180.0f);
+								distance = PX4Flow_get_distance() * cos(roll * M_PI/180.0f) * cos(pitch * M_PI/180.0f);		
 								PID_Controller_Altitude(channel_3, distance);
 							}
 						}
@@ -440,19 +455,22 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 					PID_Controller_Omega();
 					
 #if ALTITUDE_CONTROLLER
-					if (channel_3 >= 1200){
-						ga = 1000 + throttle_output;
+					if (channel_3 >= 1000){
+						ga = 1325 + throttle_output;
 					}
 					else ga = 1000;
+					if (ga > 1500) ga = 1500;
+
 #else					
 					ga = channel_3 ;	
 					if (ga > 1500) ga = 1500;
 #endif
 					
-					esc1 = ga - pid_output_roll_omega - pid_output_pitch_omega - pid_output_yaw_omega;   //MPU dat giua 2 truc
-					esc2 = ga - pid_output_roll_omega + pid_output_pitch_omega + pid_output_yaw_omega;
-					esc3 = ga + pid_output_roll_omega + pid_output_pitch_omega - pid_output_yaw_omega;
-					esc4 = ga + pid_output_roll_omega - pid_output_pitch_omega + pid_output_yaw_omega;
+//					esc1 = ga - pid_output_roll_omega - pid_output_pitch_omega - pid_output_yaw_omega;   //MPU dat giua 2 truc
+//					esc2 = ga - pid_output_roll_omega + pid_output_pitch_omega + pid_output_yaw_omega;
+//					esc3 = ga + pid_output_roll_omega + pid_output_pitch_omega - pid_output_yaw_omega;
+//					esc4 = ga + pid_output_roll_omega - pid_output_pitch_omega + pid_output_yaw_omega;
+					esc1 = esc2 = esc3 = esc4 = ga;
 					
 					if (esc1 < 1100) esc1 = 1100;                                                 //Keep the motors running.
 					if (esc2 < 1100) esc2 = 1100;                                                 //Keep the motors running.
@@ -463,17 +481,22 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 					if (esc2 > 1800) esc2 = 1800;                                                 //Limit the esc-2 pulse to 2000us.
 					if (esc3 > 1800) esc3 = 1800;                                                 //Limit the esc-3 pulse to 2000us.
 					if (esc4 > 1800) esc4 = 1800;                                                 //Limit the esc-4 pulse to 2000us.
+
+//					if (esc1 > 1500) esc1 = 1500;                                                 //Limit the esc-1 pulse to 2000us.
+//					if (esc2 > 1500) esc2 = 1500;                                                 //Limit the esc-2 pulse to 2000us.
+//					if (esc3 > 1500) esc3 = 1500;                                                 //Limit the esc-3 pulse to 2000us.
+//					if (esc4 > 1500) esc4 = 1500;                                                 //Limit the esc-4 pulse to 2000us.
+
+				}
+			else 
+				{
+					Reset_PID();
+					esc1 = 1000;
+					esc2 = 1000;
+					esc3 = 1000;
+					esc4 = 1000;
 					
-//				}
-//			else 
-//				{
-//					Reset_PID();
-//					esc1 = 1000;
-//					esc2 = 1000;
-//					esc3 = 1000;
-//					esc4 = 1000;
-//					
-//				}
+				}
 #if AUTO_RUN
 		}
 		else {
@@ -487,10 +510,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
 	/*----Xuat PWM ra dong co -----*/
 	//Used only for testing	
-		esc1 = 1000;
-		esc2 = 1000;
-		esc3 = 1000;
-		esc4 = 1000;		
+//		esc1 = 1000;
+//		esc2 = 1000;
+//		esc3 = 1000;
+//		esc4 = 1000;		
 	//Used only for testing
 		__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_1 , esc3 ); //PA0
 		__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_2 , esc1 ); //PA1
@@ -564,7 +587,7 @@ int main(void)
 		We need to use another channel to active this if we want in the future
 		Or make it always enable when the UAV set off
 	*/
-	hovering_controller = 1; 
+	hovering_controller = 0; 
 	
   /* USER CODE END 2 */
 
