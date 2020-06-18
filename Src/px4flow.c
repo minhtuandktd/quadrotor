@@ -10,6 +10,7 @@
 struct px4_i2c_integral_frame iframe;
 extern I2C_HandleTypeDef hi2c2;
 extern float yaw, pitch, roll;
+extern float channel_1, channel_2;
 
 uint8_t data_integral[26];
 float pixel_x, pixel_y;
@@ -313,6 +314,15 @@ void PX4Flow_get_angle_setpoint(float* roll_sp, float* pitch_sp){
 
 void PX4Flow_get_sp_vel(float * v_out_x, float * v_out_y, float px_pf, float py_pf){
 	float vx_sp_out, vy_sp_out;
+	
+//	float px_setpoint = 0.0f, py_setpoint = 0.0f;
+//	
+//	if (channel_1 > 1493) px_setpoint = px_setpoint + ((channel_1) - 1493)*100/507;
+//	else if (channel_1 <1477) px_setpoint = px_setpoint - (1477 - (channel_1))*100/477;
+//	
+//	if (channel_2 > 1528) py_setpoint = py_setpoint + ((channel_2) - 1528)*100/472;
+//	else if (channel_2 <1512) py_setpoint = py_setpoint - (1512 - (channel_2))*100/512;
+	
 	vx_sp_out = _kp_pos_of * (0.0f - px_pf);
 	vy_sp_out = _kp_pos_of * (0.0f - py_pf);
 	yaw_px4flow_offset = yaw;

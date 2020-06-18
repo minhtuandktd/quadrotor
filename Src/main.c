@@ -161,7 +161,7 @@ float altitude_setpoint;
 float altitude_error = 0.0f, altitude_error_pre = 0.0f, throttle_output = 0.0f, throttle_output_max = 1000.0f;
 float kp_altitude = 5.0f, ki_altitude = 1.0f, kd_altitude = 0.0f;
 float pid_altitude_integral, pid_altitude_integral_max = 1000.0f;
-float distance = 0.0f;
+float distance = 0.0f, distance_pre = 0.0f;
 uint8_t altitude_controller_counter = 0;
 //----------------------
 
@@ -259,7 +259,7 @@ void PID_Controller_Angles(void)
 		pid_pitch_setpoint = hovering_pitch_setpoint;
 	}
 	//Roll calculations///////////////////////////////////////////
-	pid_error_temp_roll = pid_roll_setpoint - roll + 1.47f ;
+	pid_error_temp_roll = pid_roll_setpoint - roll + 2.19f ;
 			
 	pid_i_mem_roll += ki_roll * pid_error_temp_roll;
 	
@@ -276,7 +276,7 @@ void PID_Controller_Angles(void)
 	pid_last_roll_d_error = pid_error_temp_roll;
 	
 	//Pitch calculations///////////////////////////////////////////
-	pid_error_temp_pitch = pid_pitch_setpoint - pitch - 0.70f;
+	pid_error_temp_pitch = pid_pitch_setpoint - pitch - 1.75f;
 	
 	pid_i_mem_pitch += ki_pitch * pid_error_temp_pitch;
 	
@@ -368,19 +368,26 @@ void PID_Controller_Omega(void)
 }
 
 void PID_Controller_Altitude(uint16_t channel_3, float distance){
-	if (channel_3 >= 1200){
-		altitude_setpoint = (float)channel_3 * 0.225f - 250.0f;
+	if (channel_3 >= 1300)
+  {
+		altitude_setpoint = ((float)channel_3 - 1000)*100/1000;
+		//altitude_setpoint = 60;
 		altitude_error = altitude_setpoint - distance;
 	}
-	else altitude_setpoint = 0.0f;
+	else 
+		altitude_error = 0;
+    //altitude_setpoint = 0.0f;
 	
 	pid_altitude_integral += ki_altitude * altitude_error;
 	if (pid_altitude_integral > pid_altitude_integral_max) pid_altitude_integral = pid_altitude_integral_max;
 	else if (pid_altitude_integral < pid_altitude_integral_max * (-1)) pid_altitude_integral = pid_altitude_integral_max * (-1);
 	
 	throttle_output = kp_altitude * altitude_error + pid_altitude_integral + kd_altitude * (altitude_error - altitude_error_pre);
-	if (throttle_output > throttle_output_max) throttle_output = throttle_output_max;
-	else if (throttle_output < 0) throttle_output = 0.0f;
+
+	if (throttle_output > throttle_output_max) 
+    throttle_output = throttle_output_max;
+	else if (throttle_output < -300.0f) 
+    throttle_output = -300.0f;
 	
 	altitude_error_pre = altitude_error;
 }
@@ -416,38 +423,44 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 			}
 #endif
 			
-//			if ( channel_5 > 1500)
-//				{
+			if ( channel_5 > 1500)
+				{
 					control_counter++;
 					
 					if (control_counter == 4)  //Change the compared value to change the speed of angle control loop
 					{								
 						PID_Controller_Angles();
 						hover_controller_counter++;
-						if (hover_controller_counter == 3		){
-							hover_controller_counter = 0;
-							PX4Flow_get_angle_setpoint(&hovering_roll_setpoint, &hovering_pitch_setpoint);
-							altitude_controller_counter++;
-							if (altitude_controller_counter == 2){
-								altitude_controller_counter = 0;
-								distance = PX4Flow_get_distance() * cos(roll * M_PI/180.0f) * cos(pitch * M_PI/180.0f);
-								PID_Controller_Altitude(channel_3, distance);
+						if (hover_controller_counter == 3		)
+							{
+								hover_controller_counter = 0;
+								PX4Flow_get_angle_setpoint(&hovering_roll_setpoint, &hovering_pitch_setpoint);
+								altitude_controller_counter++;
+								if (altitude_controller_counter == 2){
+									altitude_controller_counter = 0;
+//									if (distance == 30) distance = 0; 
+									distance = PX4Flow_get_distance() * cos(roll * M_PI/180.0f) * cos(pitch * M_PI/180.0f);
+//									if (fabs(distance - distance_pre) > 50) distance = distance_pre;
+//									distance_pre = distance;
+									PID_Controller_Altitude(channel_3, distance);
+								}
 							}
-						}
 						control_counter = 0;
 					}
 					
 					PID_Controller_Omega();
 					
 #if ALTITUDE_CONTROLLER
-					if (channel_3 >= 1200){
-						ga = 1000 + throttle_output;
-					}
-					else ga = 1000;
+//					if (channel_3 > 1300){
+//						ga = 1300 + throttle_output;
+//					}
+//					else ga = channel_3;
+					ga = channel_3;
 #else					
 					ga = channel_3 ;	
-					if (ga > 1500) ga = 1500;
+//					if (ga > 1500) ga = 1500;
 #endif
+      if (ga >= 1600) ga = 1600;
 					
 					esc1 = ga - pid_output_roll_omega - pid_output_pitch_omega - pid_output_yaw_omega;   //MPU dat giua 2 truc
 					esc2 = ga - pid_output_roll_omega + pid_output_pitch_omega + pid_output_yaw_omega;
@@ -464,16 +477,16 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 					if (esc3 > 1800) esc3 = 1800;                                                 //Limit the esc-3 pulse to 2000us.
 					if (esc4 > 1800) esc4 = 1800;                                                 //Limit the esc-4 pulse to 2000us.
 					
-//				}
-//			else 
-//				{
-//					Reset_PID();
-//					esc1 = 1000;
-//					esc2 = 1000;
-//					esc3 = 1000;
-//					esc4 = 1000;
-//					
-//				}
+				}
+			else 
+				{
+					Reset_PID();
+					esc1 = 1000;
+					esc2 = 1000;
+					esc3 = 1000;
+					esc4 = 1000;
+					
+				}
 #if AUTO_RUN
 		}
 		else {
@@ -487,10 +500,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
 	/*----Xuat PWM ra dong co -----*/
 	//Used only for testing	
-		esc1 = 1000;
-		esc2 = 1000;
-		esc3 = 1000;
-		esc4 = 1000;		
+	//	esc1 = 1000;
+	//	esc2 = 1000;
+	//	esc3 = 1000;
+	//	esc4 = 1000;		
 	//Used only for testing
 		__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_1 , esc3 ); //PA0
 		__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_2 , esc1 ); //PA1
