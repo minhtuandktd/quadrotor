@@ -86,6 +86,7 @@
 
 //Altitude controller parameters
 #define 	ALTITUDE_CONTROLLER									1
+#define 	POSITION_CONTROL 										1
 
 /* USER CODE END PD */
 
@@ -336,7 +337,7 @@ uint8_t control_counter = 0;
 uint8_t hover_controller_counter = 0;
 float hovering_roll_setpoint = 0.0f, hovering_pitch_setpoint = 0.0f;
 float px_setpoint = 0.0f, py_setpoint = 0.0f;
-
+float vx_setpoint = 0.0f, vy_setpoint = 0.0f;
 void PID_Controller_Angles(void)
 {
 	if (hovering_controller == 0)
@@ -353,12 +354,12 @@ void PID_Controller_Angles(void)
 		else if (pid_pitch_setpoint_base < 1512)pid_pitch_setpoint = pid_pitch_setpoint_base - 1512;
 		pid_pitch_setpoint = pid_pitch_setpoint/25;//15
 	}
-	if (hovering_controller == 1)
-		{
+	else if (hovering_controller == 1)
+	{
 		
-//		pid_roll_setpoint_base = channel_1;                                              //Normally channel_1 is the pid_roll_setpoint input.
-//		pid_pitch_setpoint_base = channel_2;                                             //Normally channel_2 is the pid_pitch_setpoint input.
-//		
+		pid_roll_setpoint_base = channel_1;                                              //Normally channel_1 is the pid_roll_setpoint input.
+		pid_pitch_setpoint_base = channel_2;                                             //Normally channel_2 is the pid_pitch_setpoint input.
+#if POSITION_CONTROL		
 //		if (pid_roll_setpoint_base > 1600) py_setpoint = py_setpoint - 5.0f;
 //		else if (pid_roll_setpoint_base < 1400) py_setpoint = py_setpoint + 5.0f;
 //		
@@ -366,6 +367,19 @@ void PID_Controller_Angles(void)
 //		if (pid_pitch_setpoint_base > 1600) px_setpoint = px_setpoint - 5.0f;
 //		else if (pid_pitch_setpoint_base < 1400) px_setpoint = px_setpoint + 5.0f;		
 		
+#else
+		//We need a little dead band of 16us for better results. Channel_1 middle = 1485
+		int vx_control_value, vy_control_value;
+		if (pid_roll_setpoint_base > 1493) vy_control_value = pid_roll_setpoint_base - 1493;
+		else if (pid_roll_setpoint_base < 1477) vy_control_value = pid_roll_setpoint_base - 1477;
+		vy_setpoint = vy_control_value/1000;
+		
+		//We need a little dead band of 16us for better results. Channel_2 middle = 1520
+		if (pid_pitch_setpoint_base > 1528) vx_control_value = pid_pitch_setpoint_base - 1528;
+		else if (pid_pitch_setpoint_base < 1512) vx_control_value = pid_pitch_setpoint_base - 1512;
+		vx_setpoint = vx_control_value/1000;
+		
+#endif
 		pid_roll_setpoint = hovering_roll_setpoint;
 		pid_pitch_setpoint = hovering_pitch_setpoint;
 	}

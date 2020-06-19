@@ -11,7 +11,6 @@ struct px4_i2c_integral_frame iframe;
 extern I2C_HandleTypeDef hi2c2;
 extern float yaw, pitch, roll;
 extern float channel_1, channel_2;
-extern float px_setpoint, py_setpoint;
 
 uint8_t data_integral[26];
 float pixel_x, pixel_y;
@@ -48,7 +47,7 @@ float kp_hovering = 0.20588f, ki_hovering = 0.05f, kd_hovering = 0.02735f;
 float angle_compensate_roll, angle_compensate_pitch;
 float _kp_pos_of = 0.00055f;
 float velocity_sp_lpf_hz = 12.0f;
-extern float px_setpoint, py_setpoint;
+extern float px_setpoint, py_setpoint, vx_setpoint, vy_setpoint;
 
 void readRegisterPX4(uint8_t subAddress, uint8_t count, uint8_t* dest)
 {
@@ -172,7 +171,7 @@ void PX4Flow_get_data(void){
     py_bf = -(-px) * sin_yaw + py * cos_yaw;
     px_bf = -px_bf;
   }
-	
+#if POSITION_CONTROL	
   if (slow_ctrler_cnt == (POS_CONTROLLER_T - 1)){
     slow_ctrler_cnt = 0;
 		PX4Flow_get_sp_vel(&vx_sp, &vy_sp, px, py, px_setpoint, py_setpoint);
@@ -180,6 +179,10 @@ void PX4Flow_get_data(void){
   slow_ctrler_cnt++;
 	
   px4flow_position_pid(vx_sp, vy_sp, vel_x_vip, vel_y_vip);
+#else
+  px4flow_position_pid(vx_setpoint, vy_setpoint, vel_x_vip, vel_y_vip);
+	
+#endif
   /*
   Convert angle to rc
   */
