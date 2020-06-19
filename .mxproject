@@ -1,7 +1,7 @@
 [PreviousGenFiles]
-HeaderPath=H:/Giao trinh/Thiet ke UAV/Code/quadrotor/Inc
+HeaderPath=D:/Dulieu/STM32F407/UAV-VER5/Inc
 HeaderFiles=stm32f4xx_it.h;stm32f4xx_hal_conf.h;main.h;
-SourcePath=H:/Giao trinh/Thiet ke UAV/Code/quadrotor/Src
+SourcePath=D:/Dulieu/STM32F407/UAV-VER5/Src
 SourceFiles=stm32f4xx_it.c;stm32f4xx_hal_msp.c;main.c;
 
 [PreviousLibFiles]

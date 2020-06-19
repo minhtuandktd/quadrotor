@@ -11,6 +11,7 @@ struct px4_i2c_integral_frame iframe;
 extern I2C_HandleTypeDef hi2c2;
 extern float yaw, pitch, roll;
 extern float channel_1, channel_2;
+extern float px_setpoint, py_setpoint;
 
 uint8_t data_integral[26];
 float pixel_x, pixel_y;
@@ -22,6 +23,7 @@ double yaw_px4flow, yaw_px4flow_offset;
 double vel_x_vip, vel_y_vip;
 float real_delta_px4flow_vel_x, real_delta_px4flow_vel_y;
 float real_delta_sonar, delta_sonar_buffer[DELTA_SONAR_SIZE + 1];
+float real_distance_buffer[DELTA_SONAR_DISTANCE + 1];
 uint8_t delta_px4flow_vel_cnt_x, delta_px4flow_vel_cnt_y;
 float delta_px4flow_vel_x_buffer[DELTA_PX4FLOWVEL_SIZE + 1], delta_px4flow_vel_y_buffer[DELTA_PX4FLOWVEL_SIZE + 1];
 float pre_velocity_x, pre_velocity_y;
@@ -46,6 +48,7 @@ float kp_hovering = 0.20588f, ki_hovering = 0.05f, kd_hovering = 0.02735f;
 float angle_compensate_roll, angle_compensate_pitch;
 float _kp_pos_of = 0.00055f;
 float velocity_sp_lpf_hz = 12.0f;
+extern float px_setpoint, py_setpoint;
 
 void readRegisterPX4(uint8_t subAddress, uint8_t count, uint8_t* dest)
 {
@@ -79,7 +82,7 @@ float ground_distance_cm, pre_ground_distance_cm = 0.0f;
 float velocity_x, velocity_y;
 uint32_t last_px4flow_timer, px4flow_read_timer, PX4read_timer;
 float real_delta_sonar, delta_sonar_buffer[DELTA_SONAR_SIZE + 1];
-uint8_t delta_sonar_cnt = 0;
+uint8_t delta_sonar_cnt = 0, real_distance_counter = 0;
 float flowScaler_x = 0.0f, flowScaler_y = 0.0f;
 float flowScaleFactorX, flowScaleFactorY;
 float pid_poshold_max;
@@ -97,7 +100,10 @@ void PX4Flow_Init(void){
 		kd_hovering = 0.02735f;
 		px = py = 0.0f;
 }
-float real_ground_distance;
+
+float real_ground_distance, ground_distance_filtered, delta_sonar;
+uint32_t distance_error_counter = 0;
+
 void PX4Flow_get_data(void){
   gyro_x_rate = iframe.gyro_x_rate_integral / 10.0f; // mrad
   gyro_y_rate = iframe.gyro_y_rate_integral / 10.0f; // mrad
@@ -110,10 +116,21 @@ void PX4Flow_get_data(void){
   ground_distance_cm = ground_distance/10.0f;
   quality = iframe.quality;
 
-  real_delta_sonar = average_filter(delta_sonar_buffer, DELTA_SONAR_SIZE, pre_ground_distance_cm - ground_distance_cm, & delta_sonar_cnt);
-  pre_ground_distance_cm = ground_distance_cm;
+	if (ground_distance_cm == 0) {
+		distance_error_counter++;
+	}
+	delta_sonar = ground_distance_cm - pre_ground_distance_cm;
+	if ((delta_sonar > 70.0f) || (delta_sonar < -70.0f)){
+		ground_distance_cm = pre_ground_distance_cm;
+	}
+  real_delta_sonar = average_filter(delta_sonar_buffer, DELTA_SONAR_SIZE, pre_ground_distance_cm - ground_distance_cm, &delta_sonar_cnt);
 	
-	real_ground_distance = ground_distance_cm * cos(roll * M_PI/180.0f) * cos(pitch * M_PI/180.0f);
+	//ground_distance_filtered = LPF(ground_distance_cm, pre_ground_distance_cm, 30.0f, 0.048f);
+  //ground_distance_filtered = average_filter(real_distance_buffer, DELTA_SONAR_DISTANCE, ground_distance_cm, &real_distance_counter);
+//	ground_distance_filtered = ground_distance_filtered*0.65f + ground_distance_cm*0.35f;
+	
+	pre_ground_distance_cm = ground_distance_cm;
+//	real_ground_distance = ground_distance_filtered * cos(roll * M_PI/180.0f) * cos(pitch * M_PI/180.0f);
 	
   if (quality > 150) {
     // Update flow rate with gyro rate
@@ -158,7 +175,7 @@ void PX4Flow_get_data(void){
 	
   if (slow_ctrler_cnt == (POS_CONTROLLER_T - 1)){
     slow_ctrler_cnt = 0;
-		PX4Flow_get_sp_vel(&vx_sp, &vy_sp, 0.0f, py);
+		PX4Flow_get_sp_vel(&vx_sp, &vy_sp, px, py, px_setpoint, py_setpoint);
   }
   slow_ctrler_cnt++;
 	
@@ -311,20 +328,29 @@ void PX4Flow_get_angle_setpoint(float* roll_sp, float* pitch_sp){
 	*roll_sp = lpf_pid_px_out;
 	*pitch_sp = lpf_pid_py_out;
 }
+float w_px_sp, w_py_sp;
 
-void PX4Flow_get_sp_vel(float * v_out_x, float * v_out_y, float px_pf, float py_pf){
+void PX4Flow_get_sp_vel(float * v_out_x, float * v_out_y, float px_pf, float py_pf, float px_sp, float py_sp){
 	float vx_sp_out, vy_sp_out;
 	
-//	float px_setpoint = 0.0f, py_setpoint = 0.0f;
-//	
-//	if (channel_1 > 1493) px_setpoint = px_setpoint + ((channel_1) - 1493)*100/507;
-//	else if (channel_1 <1477) px_setpoint = px_setpoint - (1477 - (channel_1))*100/477;
-//	
-//	if (channel_2 > 1528) py_setpoint = py_setpoint + ((channel_2) - 1528)*100/472;
-//	else if (channel_2 <1512) py_setpoint = py_setpoint - (1512 - (channel_2))*100/512;
+
 	
-	vx_sp_out = _kp_pos_of * (0.0f - px_pf);
-	vy_sp_out = _kp_pos_of * (0.0f - py_pf);
+	if (channel_1 > 1493) px_setpoint = px_setpoint + ((channel_1) - 1493)*10/507;
+	else if (channel_1 <1477) px_setpoint = px_setpoint - (1477 - (channel_1))*10/477;
+	
+	if (channel_2 > 1528) py_setpoint = py_setpoint + ((channel_2) - 1528)*10/472;
+	else if (channel_2 <1512) py_setpoint = py_setpoint - (1512 - (channel_2))*10/512;
+	
+	vx_sp_out = _kp_pos_of * (px_setpoint - px_pf);
+	vy_sp_out = _kp_pos_of * (py_setpoint - py_pf);
+	
+//	vx_sp_out = _kp_pos_of * (0.0f - px_pf);
+//	vy_sp_out = _kp_pos_of * (0.0f - py_pf);
+
+//	w_px_sp = px_sp;
+//	w_py_sp = py_sp;
+//	vx_sp_out = _kp_pos_of * (px_sp - px_pf);
+//	vy_sp_out = _kp_pos_of * (py_sp - py_pf);
 	yaw_px4flow_offset = yaw;
 	
 	vx_sp_out = LPF(vx_sp_out, *v_out_x, velocity_sp_lpf_hz, POS_CONTROLLER_T*px4flow_timespan);
@@ -336,5 +362,7 @@ void PX4Flow_get_sp_vel(float * v_out_x, float * v_out_y, float px_pf, float py_
 }
 
 float PX4Flow_get_distance(void){
-	return ground_distance_cm;
+	if (ground_distance_filtered == 30.0f) return 0.0f;
+	else
+		return ground_distance_filtered;
 }
