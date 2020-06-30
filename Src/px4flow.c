@@ -7,11 +7,18 @@
 	PB10 - SCL
 	GND
 */
+
+
+
+
+
 struct px4_i2c_integral_frame iframe;
 extern I2C_HandleTypeDef hi2c2;
 extern float yaw, pitch, roll;
-extern float channel_1, channel_2;
+extern float channel_1, channel_2, channel_3;
 extern float px_setpoint, py_setpoint;
+extern uint8_t hovering_controller ;
+uint8_t ground_distance_count = 0, ground_distance_fail_count = 0;
 
 uint8_t data_integral[26];
 float pixel_x, pixel_y;
@@ -95,14 +102,53 @@ void PX4Flow_Init(void){
     pid_poshold_max = sin(poshold_pid_max * DEG_TO_RAD);
     _kp_pos_of = 0.00055f;
     slow_ctrler_cnt = 0;
-		kp_hovering = 0.20588f;
-		ki_hovering = 0.05f;
-		kd_hovering = 0.02735f;
+		kp_hovering = 0.1f;///0.03f; //0.20588
+		ki_hovering = 0.05f ;//0.05f;
+		kd_hovering = 0.08f;//0.25f ;//0.02735f;
 		px = py = 0.0f;
 }
 
+/*
+	ALTITUDE CONTROLLER VARIABLES
+*/
+float altitude_setpoint = 0.0f;
+float altitude_error = 0.0f, altitude_error_pre = 0.0f, throttle_output = 0.0f, throttle_output_max = 275.0f;
+//float kp_altitude = 0.5f, ki_altitude = 0.5f, kd_altitude = 10.0f;
+float kp_altitude = 0.75f, ki_altitude = 0.07f, kd_altitude = 5.5f;
+float pid_altitude_integral, pid_altitude_d = 0.0f, pre_pid_altitude_d = 0.0f, pid_altitude_integral_max = 95.0f;
+float distance = 0.0f, distance_rep = 0.0f, distance_real = 0.0f, pre_distance = 0.0f, delta_us015_buffer[6],distance_buffer[20];
+
+
+void PID_Controller_Altitude(uint16_t channel_3, float distance)
+{
+	if (channel_3 > THROTTLE_P)
+	{
+		altitude_setpoint = 70.0f;
+	}
+	else 
+		altitude_setpoint = distance;
+
+		altitude_error = altitude_setpoint - distance;
+		
+		pid_altitude_integral += ki_altitude * altitude_error;	
+		if (pid_altitude_integral > pid_altitude_integral_max) pid_altitude_integral = pid_altitude_integral_max;
+		else if (pid_altitude_integral < pid_altitude_integral_max * (-1)) pid_altitude_integral = pid_altitude_integral_max * (-1);	
+		pid_altitude_d = kd_altitude * (altitude_error - altitude_error_pre);
+		pid_altitude_d = LPF(pid_altitude_d, pre_pid_altitude_d, 50, 0.112f);//anpha=0.972
+		pid_altitude_d = Math_fConstrain(pid_altitude_d, -45.0f, 45.0f);
+		pre_pid_altitude_d = pid_altitude_d;
+	
+		throttle_output = kp_altitude * altitude_error + pid_altitude_integral + pid_altitude_d ;
+		
+		if (throttle_output > 125.0f)  throttle_output = 125.0f;
+		else if (throttle_output < -125.0f)  throttle_output = -125.0f;
+		
+		altitude_error_pre = altitude_error;
+		
+}
+
 float real_ground_distance, ground_distance_filtered, delta_sonar;
-uint32_t distance_error_counter = 0;
+uint32_t distance_error_counter = 0, count_error = 0;
 
 void PX4Flow_get_data(void){
   gyro_x_rate = iframe.gyro_x_rate_integral / 10.0f; // mrad
@@ -113,23 +159,47 @@ void PX4Flow_get_data(void){
   timespan = iframe.integration_timespan; // microseconds
   px4flow_timespan = timespan * 0.000001f;
   ground_distance = iframe.ground_distance; // mm
-  ground_distance_cm = ground_distance/10.0f;
+  ground_distance_cm = ground_distance*0.1f;
   quality = iframe.quality;
 
 	if (ground_distance_cm == 0) {
 		distance_error_counter++;
 	}
-	delta_sonar = ground_distance_cm - pre_ground_distance_cm;
-	if ((delta_sonar > 70.0f) || (delta_sonar < -70.0f)){
-		ground_distance_cm = pre_ground_distance_cm;
+	//---Distance ground process-------
+	ground_distance_count++;
+	if (ground_distance_count >= 7)
+	{
+		ground_distance_count = 0;
+		if (fabs(ground_distance_cm - pre_ground_distance_cm) >= 20.0f) {
+      ground_distance_fail_count++;
+      if (ground_distance_fail_count < 5) {
+        ground_distance_cm = pre_ground_distance_cm;
+      } else {
+        ground_distance_fail_count = 0;
+      }
+    } else {
+      ground_distance_fail_count = 0;
+    } 
+    real_delta_sonar = average_filter(delta_sonar_buffer, DELTA_SONAR_SIZE, pre_ground_distance_cm - ground_distance_cm, & delta_sonar_cnt);
+    pre_ground_distance_cm = ground_distance_cm;
+		distance_real = ground_distance_cm* cos(roll * M_PI/180.0f) * cos(pitch * M_PI/180.0f);
+		if( distance_real < 30) distance_real = 30.0f;
+		PID_Controller_Altitude(channel_3, distance_real);
 	}
-  real_delta_sonar = average_filter(delta_sonar_buffer, DELTA_SONAR_SIZE, pre_ground_distance_cm - ground_distance_cm, &delta_sonar_cnt);
 	
-	//ground_distance_filtered = LPF(ground_distance_cm, pre_ground_distance_cm, 30.0f, 0.048f);
+//	delta_sonar = ground_distance_cm - pre_ground_distance_cm;
+//	if ((delta_sonar > 70.0f) || (delta_sonar < -70.0f)){
+//		ground_distance_cm = pre_ground_distance_cm;
+//	}
+	
+	
+//  real_delta_sonar = average_filter(delta_sonar_buffer, DELTA_SONAR_SIZE, pre_ground_distance_cm - ground_distance_cm, &delta_sonar_cnt);
+	
+//	ground_distance_filtered = LPF(ground_distance_cm, pre_ground_distance_cm, 50.0f, 0.048f);
   //ground_distance_filtered = average_filter(real_distance_buffer, DELTA_SONAR_DISTANCE, ground_distance_cm, &real_distance_counter);
-//	ground_distance_filtered = ground_distance_filtered*0.65f + ground_distance_cm*0.35f;
+//	ground_distance_filtered = ground_distance_filtered*0.5f + ground_distance_cm*0.5f;
 	
-	pre_ground_distance_cm = ground_distance_cm;
+//	pre_ground_distance_cm = ground_distance_cm;
 //	real_ground_distance = ground_distance_filtered * cos(roll * M_PI/180.0f) * cos(pitch * M_PI/180.0f);
 	
   if (quality > 150) {
@@ -139,8 +209,8 @@ void PX4Flow_get_data(void){
     // Scale based on ground distance and compute speed
     // (flow/1000) * (ground_distance/1000) / (timespan/1000000)
     // velocity in body frame
-    velocity_x = pixel_x * real_ground_distance * 10.0f / timespan; // m/s
-    velocity_y = pixel_y * real_ground_distance * 10.0f / timespan; // m/s 
+    velocity_x = pixel_x * ground_distance_cm * 10.0f / timespan; // m/s
+    velocity_y = pixel_y * ground_distance_cm * 10.0f / timespan; // m/s 
     vel_x_avr = average_filter(vel_x_buffer, PX4FLOW_VEL_SIZE, velocity_x, & vel_x_cnt);
     vel_y_avr = average_filter(vel_y_buffer, PX4FLOW_VEL_SIZE, velocity_y, & vel_y_cnt);
     yaw_px4flow = calculate_relative_yaw(yaw, yaw_px4flow_offset);
@@ -172,10 +242,23 @@ void PX4Flow_get_data(void){
     py_bf = -(-px) * sin_yaw + py * cos_yaw;
     px_bf = -px_bf;
   }
+//	if (quality == 0)
+//	{
+//		count_error++;
+//	}
+//	else
+//	{
+//		count_error = 0;
+//	}
+//	if (count_error == 10)
+//	{
+//		hovering_controller = 1;
+//	}
 	
   if (slow_ctrler_cnt == (POS_CONTROLLER_T - 1)){
     slow_ctrler_cnt = 0;
-		PX4Flow_get_sp_vel(&vx_sp, &vy_sp, px, py, px_setpoint, py_setpoint);
+//		PX4Flow_get_sp_vel(&vx_sp, &vy_sp, px, py, px_setpoint, py_setpoint);
+		PX4Flow_get_sp_vel(&vx_sp, &vy_sp, px_bf, py_bf, px_setpoint, py_setpoint);
   }
   slow_ctrler_cnt++;
 	
@@ -202,7 +285,7 @@ void px4flow_position_pid(float vx_setpoint, float vy_setpoint, float vx_input, 
   //		Dx = (vel_x_error - pre_vel_x_error)*velocity.d/px4flow_timespan;
   //	  Dx = Math_fConstrain(Dx, -sin(d_pos_max*DEG_TO_RAD), sin(d_pos_max*DEG_TO_RAD));
   Dx = real_delta_px4flow_vel_x * kd_hovering / px4flow_timespan;
-  //		Dx_lpf = LPF(Dx, Dx_lpf, d_filter_hz, px4flow_timespan);
+//	Dx_lpf = LPF(Dx, Dx_lpf, d_filter_hz, px4flow_timespan);
   px4flow_pid_avr_dx = average_filter(pid_d_buffer_px, PX4FLOW_PID_D_BUFFER_SIZE, Dx, & px4flow_pid_d_cnt_x);
   //	temp_pid_rx =  velpid_x_p + velpid_x_i + Dx;
   //	  temp_pid_rx =  velpid_x_p + velpid_x_i + Dx_lpf;
@@ -333,24 +416,34 @@ float w_px_sp, w_py_sp;
 void PX4Flow_get_sp_vel(float * v_out_x, float * v_out_y, float px_pf, float py_pf, float px_sp, float py_sp){
 	float vx_sp_out, vy_sp_out;
 	
+	vx_sp_out = 0.0f;
+	vy_sp_out = 0.0f;
+	
+//	if (channel_1 > 1493) vx_sp_out = -((channel_1) - 1493)*1.0/507;
+//	else if (channel_1 <1477) vx_sp_out =  (1477 - (channel_1))*1.0/477;
+//					else vx_sp_out = 0.0f;
+//	
+//	if (channel_2 > 1528) vy_sp_out =  ((channel_2) - 1528)*1.0/472;
+//	else if (channel_2 <1512) vy_sp_out =  -(1512 - (channel_2))*1.0/512;
+//					else vy_sp_out = 0.0f;
 
 	
-	if (channel_1 > 1493) px_setpoint = px_setpoint + ((channel_1) - 1493)*10/507;
-	else if (channel_1 <1477) px_setpoint = px_setpoint - (1477 - (channel_1))*10/477;
+	if (channel_1 > 1500) px_setpoint = px_setpoint + ((channel_1) - 1500)*100/500;
+	else if (channel_1 <1470) px_setpoint = px_setpoint - (1470 - (channel_1))*100/470;
 	
-	if (channel_2 > 1528) py_setpoint = py_setpoint + ((channel_2) - 1528)*10/472;
-	else if (channel_2 <1512) py_setpoint = py_setpoint - (1512 - (channel_2))*10/512;
-	
-	vx_sp_out = _kp_pos_of * (px_setpoint - px_pf);
-	vy_sp_out = _kp_pos_of * (py_setpoint - py_pf);
+	if (channel_2 > 1535) py_setpoint = py_setpoint + ((channel_2) - 1535)*100/465;
+	else if (channel_2 <1505) py_setpoint = py_setpoint - (1505 - (channel_2))*100/505;
+//	
+//	vx_sp_out = _kp_pos_of * (px_setpoint - px_pf);
+//	vy_sp_out = _kp_pos_of * (py_setpoint - py_pf);
 	
 //	vx_sp_out = _kp_pos_of * (0.0f - px_pf);
 //	vy_sp_out = _kp_pos_of * (0.0f - py_pf);
 
 //	w_px_sp = px_sp;
 //	w_py_sp = py_sp;
-//	vx_sp_out = _kp_pos_of * (px_sp - px_pf);
-//	vy_sp_out = _kp_pos_of * (py_sp - py_pf);
+	vx_sp_out = _kp_pos_of * (px_setpoint - px_pf);
+	vy_sp_out = _kp_pos_of * (py_setpoint - py_pf);
 	yaw_px4flow_offset = yaw;
 	
 	vx_sp_out = LPF(vx_sp_out, *v_out_x, velocity_sp_lpf_hz, POS_CONTROLLER_T*px4flow_timespan);
@@ -362,7 +455,10 @@ void PX4Flow_get_sp_vel(float * v_out_x, float * v_out_y, float px_pf, float py_
 }
 
 float PX4Flow_get_distance(void){
-	if (ground_distance_filtered == 30.0f) return 0.0f;
-	else
-		return ground_distance_filtered;
+//	if (ground_distance_filtered == 30.0f) return 0.0f;
+//	else
+//		return ground_distance_filtered;
+	return ground_distance_filtered;
 }
+
+

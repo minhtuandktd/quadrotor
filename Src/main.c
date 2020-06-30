@@ -46,7 +46,7 @@
 #include "mpu9255.h"
 #include "IMU.h"
 #include "px4flow.h"
-#include "dwt_stm32_delay.h"
+//#include "dwt_stm32_delay.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -74,15 +74,17 @@
 							
 							
 //PID Parameters							
-#define		KP_ROLL_PITCH												5.0f 		
+#define		KP_ROLL_PITCH												6.5f //5.0f 		
 #define		KI_ROLL_PITCH												0.0f  
 #define		KD_ROLL_PITCH												0.0f 	
 							
-#define		KP_ROLL_PITCH_OMEGA									0.46 //1.1f 		//1.3f  
+#define		KP_ROLL_PITCH_OMEGA									0.47f//0.6f //1.1f 		//1.3f //0.46f 
 #define		KI_ROLL_PITCH_OMEGA									0.001f  //0.0052f;
-#define		KD_ROLL_PITCH_OMEGA									5.0 //12.0f 	//12.6f;
-#define 	ROLL_PITCH_MAX_INTEGRAL							200.0f  
+#define		KD_ROLL_PITCH_OMEGA									2.5f //5.0f 	//12.6f;
+#define 	ROLL_PITCH_MAX_INTEGRAL							20//200.0f  
 #define 	ROLL_PITCH_MAX_OUTPUT								350.0f  
+
+
 
 //Altitude controller parameters
 #define 	ALTITUDE_CONTROLLER									1
@@ -109,12 +111,14 @@ uint32_t time = 0, pre_time = 0;
 float dt_time = 0;
 double vel_us015 = 0.0f, pre_rate_us015 = 0.0f;
 uint32_t dem_sonar = 0;
-static uint8_t delta_us015_cnt;
+static uint8_t delta_us015_cnt, distance_counter;
 
 uint32_t hover_throttle ,add_throttle;
 uint8_t hovering_controller = 0;
 extern float temp_pid_rx, temp_pid_ry;
 extern float velpid_x_i, velpid_y_i;
+extern float ground_distance_filtered;
+extern float throttle_output,distance_real;
 
 uint32_t count = 0, ii= 0 ,ga = 0, iii = 0, start = 0;
 
@@ -168,23 +172,15 @@ double kd_yaw = 0;
 float pid_output_yaw = 0, pid_error_temp_yaw = 0, pid_i_mem_yaw = 0, pid_last_yaw_d_error = 0;
 float pid_max_yaw = 100.0f;
 
-//double kp_yaw_omega = 7.0f;
-double kp_yaw_omega = 3.0f;
-double ki_yaw_omega = 0.01f;
-double kd_yaw_omega = 1.0f;
+
+double kp_yaw_omega = 7.0f;//3.3
+double ki_yaw_omega = 0.01f;//0.036
+double kd_yaw_omega = 1.0f;//0
 float pid_output_yaw_omega = 0, pid_error_temp_yaw_omega = 0, pid_i_mem_yaw_omega = 0, pid_last_yaw_d_error_omega = 0;
 float pid_max_yaw_omega = 200.0f;
 float pid_max_yaw_omega_integral = 50.0f;
 
-/*
-	ALTITUDE CONTROLLER VARIABLES
-*/
-float altitude_setpoint = 0.0f;
-float altitude_error = 0.0f, altitude_error_pre = 0.0f, throttle_output = 0.0f, throttle_output_max = 275.0f;
-//float kp_altitude = 0.5f, ki_altitude = 0.5f, kd_altitude = 10.0f;
-float kp_altitude = 5.0f, ki_altitude = 0.15f, kd_altitude = 0.5f;
-float pid_altitude_integral, pid_altitude_integral_max = 400.0f;
-float distance = 0.0f, distance_rep = 0.0f, distance_real = 0.0f, pre_distance = 0.0f, delta_us015_buffer[6];
+
 uint8_t altitude_controller_counter = 0;
 uint8_t takeoff_detect = 0;
 int16_t rate_detect_cnt = 0;
@@ -257,73 +253,77 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 					}
 				}
 		}
-	if (htim->Instance == TIM9)
-		{
-		if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1)
-		{
-		
-			if (HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_5) == 1){
-				__HAL_TIM_SetCounter(&htim9, 0);
-			}
-			else{
-				time = __HAL_TIM_GetCompare(&htim9, TIM_CHANNEL_1);
-				/*----XU LY DO CAO------*/
-				distance_rep = (float) time * 0.0171821f;//cm
-				dt_time = (100 + (time - pre_time)*0.001f)*0.001f;
-				distance = distance*0.65 + distance_rep*0.35;
-				vel_us015 = average_filter(delta_us015_buffer, 5, (pre_distance - distance)/dt_time, &delta_us015_cnt);
-				pre_distance = distance;
-				pre_time = time;
-				if (takeoff_detect == 0)
-							{
-//								if (fabs(vel_us015) < DETECT_TAKEOFF_RATE) 
-//								{
-//									if (rate_detect_cnt > 0) 
-//									{
-//										rate_detect_cnt = 0;
-//									} 
-//									else 
-//									{
-//										hover_throttle = hover_throttle + 10;
-//									}
-//									// value for winning quadcopter's gravity to takeoff
-//									if (hover_throttle >= HOVER_THROTTLE_MAX + TAKEOFF_COMPENSATE) 
+	
+//	if (htim->Instance == TIM9)
+//		{
+//		if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1)
+//		{
+//		
+//			if (HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_5) == 1){
+//				__HAL_TIM_SetCounter(&htim9, 0);
+//			}
+//			else{
+//				time = __HAL_TIM_GetCompare(&htim9, TIM_CHANNEL_1);
+//				/*----XU LY DO CAO------*/
+//				distance_rep = (float) time * 0.0171821f;//cm
+//				dt_time = (100 + (time - pre_time)*0.001f)*0.001f;
+////				distance = distance*0.65 + distance_rep*0.35;
+//				distance = average_filter(distance_buffer, 19, distance_rep, &distance_counter);
+////				distance = LPF(distance_rep, pre_distance, 10.0f, 0.048f);
+//				vel_us015 = average_filter(delta_us015_buffer, 5, (pre_distance - distance)/dt_time, &delta_us015_cnt);
+//				pre_distance = distance;
+//				pre_time = time;
+//				if (takeoff_detect == 0)
+//							{
+////								if (fabs(vel_us015) < DETECT_TAKEOFF_RATE) 
+////								{
+////									if (rate_detect_cnt > 0) 
+////									{
+////										rate_detect_cnt = 0;
+////									} 
+////									else 
+////									{
+////										hover_throttle = hover_throttle + 10;
+////									}
+////									// value for winning quadcopter's gravity to takeoff
+////									if (hover_throttle >= HOVER_THROTTLE_MAX + TAKEOFF_COMPENSATE) 
+////										{
+////											hover_throttle = HOVER_THROTTLE_MAX + TAKEOFF_COMPENSATE;
+////										}
+////								}
+//								// auto takeoff detected.
+////								else 
+////									{
+//										// the velocity must increase to ensure that the copter is going up, maybe noise??
+//										if (fabs(vel_us015) - pre_rate_us015 > DETECT_TAKEOFF_RATE_DELTA_CHECK) 
 //										{
-//											hover_throttle = HOVER_THROTTLE_MAX + TAKEOFF_COMPENSATE;
+//											rate_detect_cnt++;
+//										} 
+//										else 
+//											{
+//												rate_detect_cnt = 0;								
+//											}
+//										pre_rate_us015 = fabs(vel_us015);
+//										if (rate_detect_cnt >= 4)
+//										{
+//											takeoff_detect = 1;
+//											// hover_throttle current is go high, then we subtract a value to get approximately hover value
+////											hover_throttle = hover_throttle - TAKEOFF_COMPENSATE;
+//											ga = ga - TAKEOFF_COMPENSATE;
+//											//just in case the quadcopter isn't power, then this value will be higher than hover_throttle
+//											// limits throttle when it takes off
+////											hover_throttle = Math_fConstrain(hover_throttle, HOVER_THROTTLE_MIN, HOVER_THROTTLE_MAX);
+////											Reset_PID();
+////											pid_altitude_integral = 0;
+////											altitude_setpoint = 40;
 //										}
-//								}
-								// auto takeoff detected.
-//								else 
-//									{
-										// the velocity must increase to ensure that the copter is going up, maybe noise??
-										if (fabs(vel_us015) - pre_rate_us015 > DETECT_TAKEOFF_RATE_DELTA_CHECK) 
-										{
-											rate_detect_cnt++;
-										} 
-										else 
-											{
-												rate_detect_cnt = 0;								
-											}
-										pre_rate_us015 = fabs(vel_us015);
-										if (rate_detect_cnt >= 4)
-										{
-											takeoff_detect = 1;
-											// hover_throttle current is go high, then we subtract a value to get approximately hover value
-//											hover_throttle = hover_throttle - TAKEOFF_COMPENSATE;
-											ga = ga - TAKEOFF_COMPENSATE;
-											//just in case the quadcopter isn't power, then this value will be higher than hover_throttle
-											// limits throttle when it takes off
-//											hover_throttle = Math_fConstrain(hover_throttle, HOVER_THROTTLE_MIN, HOVER_THROTTLE_MAX);
-//											Reset_PID();
-//											pid_altitude_integral = 0;
-//											altitude_setpoint = 40;
-										}
-									}
+//									}
 
-				/*----END XU LY DO CAO-----*/
-			}
-		}
-	}
+//				/*----END XU LY DO CAO-----*/
+//			}
+//		}
+//	}
+	
 }
 
 
@@ -346,12 +346,14 @@ void PID_Controller_Angles(void)
 		//We need a little dead band of 16us for better results. Channel_1 middle = 1485
 		if (pid_roll_setpoint_base > 1493) pid_roll_setpoint = pid_roll_setpoint_base - 1493;
 		else if (pid_roll_setpoint_base < 1477) pid_roll_setpoint = pid_roll_setpoint_base - 1477;
-		pid_roll_setpoint = pid_roll_setpoint/25;//15
+					else pid_roll_setpoint = 0.0f;
+		pid_roll_setpoint = pid_roll_setpoint/20;//15
 		
 		//We need a little dead band of 16us for better results. Channel_2 middle = 1520
 		if (pid_pitch_setpoint_base > 1528)pid_pitch_setpoint = pid_pitch_setpoint_base - 1528;
 		else if (pid_pitch_setpoint_base < 1512)pid_pitch_setpoint = pid_pitch_setpoint_base - 1512;
-		pid_pitch_setpoint = pid_pitch_setpoint/25;//15
+					else pid_pitch_setpoint = 0.0f;
+		pid_pitch_setpoint = pid_pitch_setpoint/20;//15
 	}
 	if (hovering_controller == 1)
 		{
@@ -370,7 +372,7 @@ void PID_Controller_Angles(void)
 		pid_pitch_setpoint = hovering_pitch_setpoint;
 	}
 	//Roll calculations///////////////////////////////////////////
-	pid_error_temp_roll = pid_roll_setpoint - roll + 2.19f ;
+	pid_error_temp_roll = pid_roll_setpoint - roll + 2.45f ;
 			
 	pid_i_mem_roll += ki_roll * pid_error_temp_roll;
 	
@@ -387,7 +389,7 @@ void PID_Controller_Angles(void)
 	pid_last_roll_d_error = pid_error_temp_roll;
 	
 	//Pitch calculations///////////////////////////////////////////
-	pid_error_temp_pitch = pid_pitch_setpoint - pitch - 1.75f;
+	pid_error_temp_pitch = pid_pitch_setpoint - pitch - 1.08f;
 	
 	pid_i_mem_pitch += ki_pitch * pid_error_temp_pitch;
 	
@@ -478,63 +480,6 @@ void PID_Controller_Omega(void)
 	pid_last_yaw_d_error_omega = pid_error_temp_yaw_omega;
 }
 
-void PID_Controller_Altitude(uint16_t channel_3, float distance)
-{
-
-	altitude_setpoint = ((float)channel_3 - 1000)*150*0.001f;
-
-//    if (channel_3 > 1650) 
-//		{
-//      add_throttle = (channel_3 - 1500 - 150) / 3 + pid_altitude_integral;
-//    } 
-//		if (channel_3 < 1350) 
-//		{
-//      add_throttle = (channel_3 - 1500 + 150) / 3 + pid_altitude_integral;
-//    }
-//    //sonar_reset_pid_alt();
-//    altitude_setpoint = distance;
-//	if ((channel_3 < 1650)&&(channel_3 > 1350) )
-//	{
-//		add_throttle = 0;
-//		if (distance < 200.0f && distance > 9.0f)
-//		{
-			altitude_error = altitude_setpoint - distance;
-			
-			pid_altitude_integral += ki_altitude * altitude_error;
-			
-			if (pid_altitude_integral > pid_altitude_integral_max) pid_altitude_integral = pid_altitude_integral_max;
-			else if (pid_altitude_integral < pid_altitude_integral_max * (-1)) pid_altitude_integral = pid_altitude_integral_max * (-1);
-			
-			throttle_output = kp_altitude * altitude_error + pid_altitude_integral + kd_altitude * (altitude_error - altitude_error_pre);
-
-			if (throttle_output > 600)  throttle_output = 600;
-			else if (throttle_output < -400)  throttle_output = -400;
-			
-			altitude_error_pre = altitude_error;
-//		}
-//	}
-		
-	///-------------------------------
-//	if (channel_3 >1200) 
-//	{
-//		altitude_setpoint = 40;
-//		altitude_error = altitude_setpoint - distance;
-//	}
-//	else altitude_error = 0;
-//	
-//	pid_altitude_integral += ki_altitude * altitude_error;
-//	if (pid_altitude_integral > pid_altitude_integral_max) pid_altitude_integral = pid_altitude_integral_max;
-//	else if (pid_altitude_integral < pid_altitude_integral_max * (-1)) pid_altitude_integral = pid_altitude_integral_max * (-1);
-//	
-//	throttle_output = kp_altitude * altitude_error + pid_altitude_integral + kd_altitude * (altitude_error - altitude_error_pre);
-
-//	if (throttle_output > throttle_output_max) 
-//    throttle_output = throttle_output_max;
-//	else if (throttle_output < -200.0f) 
-//    throttle_output = -200.0f;
-//	
-//	altitude_error_pre = altitude_error;
-}
 
 void Reset_PID(void)
 {
@@ -549,14 +494,14 @@ void Reset_PID(void)
 	velpid_y_i = 0.0f;
 }
 
-void triger_sonar_us_015(void)
-{
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);
-		DWT_Delay_us(1);
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
-		DWT_Delay_us(10);
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);
-}
+//void triger_sonar_us_015(void)
+//{
+//		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);
+//		DWT_Delay_us(1);
+//		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
+//		DWT_Delay_us(10);
+//		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);
+//}
 
 /* USER CODE END PFP */
 
@@ -569,12 +514,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		MPU9255_Get_Data();
 		IMU_GetYawPitchRoll();
 		// Triger Sonar
-		dem_sonar++;
-		if (dem_sonar == 25) 
-		{
-			dem_sonar = 0;
-			triger_sonar_us_015();
-		}
+//		dem_sonar++;
+//		if (dem_sonar == 25) 
+//		{
+//			dem_sonar = 0;
+//			triger_sonar_us_015();
+//		}
 		
 #if AUTO_RUN
 		if (start == 1)
@@ -593,56 +538,23 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 if ( channel_5 > 1500)
 			{
 					hover_controller_counter++;
-					if (hover_controller_counter == 25	)
+					if (hover_controller_counter == 4	)
 					{
 						hover_controller_counter = 0;
 						PX4Flow_get_angle_setpoint(&hovering_roll_setpoint, &hovering_pitch_setpoint);
-						distance_real = distance* cos(roll * M_PI/180.0f) * cos(pitch * M_PI/180.0f);	
-
-							PID_Controller_Altitude(channel_3, distance_real);				
-						}
-					
-					
-					
-					control_counter++;					
-					if (control_counter == 4)  //Change the compared value to change the speed of angle control loop
-					{								
-						PID_Controller_Angles();
-//						hover_controller_counter++;
-//						if (hover_controller_counter == 3		)
-//						{
-//								hover_controller_counter = 0;
-//								
-//								PX4Flow_get_angle_setpoint(&hovering_roll_setpoint, &hovering_pitch_setpoint);
-////								altitude_controller_counter++;
-////								if (altitude_controller_counter == 2)
-////									{
-////										altitude_controller_counter = 0;
-//									
-////										distance = PX4Flow_get_distance() * cos(roll * M_PI/180.0f) * cos(pitch * M_PI/180.0f);
-
-//										distance_real = distance* cos(roll * M_PI/180.0f) * cos(pitch * M_PI/180.0f);	
-//										PID_Controller_Altitude(channel_3, distance_real);
-////									}
-//						}
-						control_counter = 0;
-					}
-
+				
+					}					
+					PID_Controller_Angles();
 					PID_Controller_Omega();
 					
 #if ALTITUDE_CONTROLLER
-	ga = 1100 + throttle_output;
-	if (ga <1100) ga = 1100;
-	
-//					if (channel_3 > 1200){
-//						ga = 1200 + throttle_output;
-//												
-//					}
-//					else ga = channel_3;
-//					ga = channel_3;
+					if (channel_3 > THROTTLE_P){
+						ga = THROTTLE_P + throttle_output;
+						ga = ga/(cos(roll * M_PI/180.0f) * cos(pitch * M_PI/180.0f));						
+					}
+					else ga = channel_3;
 #else					
 					ga = channel_3 ;	
-//					if (ga > 1500) ga = 1500;
 #endif
       if (ga >= 1600) ga = 1600;
 					
@@ -685,16 +597,10 @@ if ( channel_5 > 1500)
 #endif
 
 	/*----Xuat PWM ra dong co -----*/
-	//Used only for testing	
-//		esc1 = 1000;
-//		esc2 = 1000;
-//		esc3 = 1000;
-//		esc4 = 1000;		
-	//Used only for testing
-//		__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_1 , esc3 ); //PA0
-//		__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_2 , esc1 ); //PA1
-//		__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_3 , esc2 ); //PA2
-//		__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_4 , esc4 ); //PA3				
+		__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_1 , esc3 ); //PA0
+		__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_2 , esc1 ); //PA1
+		__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_3 , esc2 ); //PA2
+		__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_4 , esc4 ); //PA3				
 
 	}
 
@@ -750,7 +656,7 @@ int main(void)
 	__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_2 , 1000 ); //PA1
 	__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_3 , 1000 ); //PA2
 	__HAL_TIM_SetCompare(&htim2, TIM_CHANNEL_4 , 1000 ); //PA3
-	HAL_Delay(2500);
+	HAL_Delay(4000);
 	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, GPIO_PIN_SET);
 	
 	HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_1);
@@ -759,8 +665,8 @@ int main(void)
 	HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_4);
 	HAL_TIM_Base_Start_IT(&htim3);
 	
-	DWT_Delay_Init();
-	HAL_TIM_IC_Start_IT(&htim9, TIM_CHANNEL_1);
+//	DWT_Delay_Init();
+//	HAL_TIM_IC_Start_IT(&htim9, TIM_CHANNEL_1);
 	
 	/*
 		Set this variable equal to 1 if u want to active hovering controller
@@ -768,7 +674,11 @@ int main(void)
 		Or make it always enable when the UAV set off
 	*/
 	hovering_controller = 1; 
-	hover_throttle = 1200;
+	px_setpoint = 0.0f;
+	py_setpoint = 0.0f;
+//	hover_throttle = 1200;
+	ga = 1100;
+	distance_real = 30.0f;
 	
   /* USER CODE END 2 */
 
