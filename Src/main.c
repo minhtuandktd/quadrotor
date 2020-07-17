@@ -113,14 +113,17 @@ double vel_us015 = 0.0f, pre_rate_us015 = 0.0f;
 uint32_t dem_sonar = 0;
 static uint8_t delta_us015_cnt, distance_counter;
 
+extern uint8_t px4flow_error ;
 uint32_t hover_throttle ,add_throttle;
 uint8_t hovering_controller = 0;
 extern float temp_pid_rx, temp_pid_ry;
 extern float velpid_x_i, velpid_y_i;
 extern float ground_distance_filtered;
 extern float throttle_output,distance_real;
+uint8_t flight_mode;
 
-uint32_t count = 0, ii= 0 ,ga = 0, iii = 0, start = 0;
+uint32_t count = 0, ii= 0 , iii = 0, start = 0;
+float ga = 0.0f;
 
 float channel_3 = 0, channel_5 = 0 , channel_1 = 0, channel_2 = 0;
 uint16_t pid_roll_setpoint_base =0, pid_pitch_setpoint_base = 0;
@@ -389,7 +392,7 @@ void PID_Controller_Angles(void)
 	pid_last_roll_d_error = pid_error_temp_roll;
 	
 	//Pitch calculations///////////////////////////////////////////
-	pid_error_temp_pitch = pid_pitch_setpoint - pitch - 1.08f;
+	pid_error_temp_pitch = pid_pitch_setpoint - pitch - 1.11f;
 	
 	pid_i_mem_pitch += ki_pitch * pid_error_temp_pitch;
 	
@@ -547,16 +550,37 @@ if ( channel_5 > 1500)
 					PID_Controller_Angles();
 					PID_Controller_Omega();
 					
+					
+					
 #if ALTITUDE_CONTROLLER
-					if (channel_3 > THROTTLE_P){
-						ga = THROTTLE_P + throttle_output;
-						ga = ga/(cos(roll * M_PI/180.0f) * cos(pitch * M_PI/180.0f));						
+					if (px4flow_error == 0)
+					{
+						if (channel_3 > THROTTLE_P)
+						{
+							ga = THROTTLE_P + throttle_output;
+							ga = ga/(cos(roll * M_PI/180.0f) * cos(pitch * M_PI/180.0f));		
+							flight_mode = 1;
+						}
+						else 
+							if ((channel_3 < THROTTLE_P)&&(flight_mode == 0))
+								{
+									ga = channel_3;
+								}
+							else 
+									if ((channel_3 < THROTTLE_P)&&(flight_mode == 1))
+									{
+										ga = ga - 0.2f;
+									}
 					}
-					else ga = channel_3;
+					else 
+						if (px4flow_error == 1)
+						{
+							ga = ga - 0.2f;
+						}
 #else					
 					ga = channel_3 ;	
 #endif
-      if (ga >= 1600) ga = 1600;
+      if (ga >= 1600.0f) ga = 1600.0f;
 					
 					esc1 = ga - pid_output_roll_omega - pid_output_pitch_omega - pid_output_yaw_omega;   //MPU dat giua 2 truc
 					esc2 = ga - pid_output_roll_omega + pid_output_pitch_omega + pid_output_yaw_omega;
@@ -646,6 +670,7 @@ int main(void)
 	MPU9255_Init();
 	InitGyrOffset();
 	PX4Flow_Init();
+	px4flow_error = 0;
 	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
 	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
 	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
@@ -673,11 +698,12 @@ int main(void)
 		We need to use another channel to active this if we want in the future
 		Or make it always enable when the UAV set off
 	*/
+	flight_mode = 0;
 	hovering_controller = 1; 
 	px_setpoint = 0.0f;
 	py_setpoint = 0.0f;
 //	hover_throttle = 1200;
-	ga = 1100;
+	ga = 1100.0f;
 	distance_real = 30.0f;
 	
   /* USER CODE END 2 */

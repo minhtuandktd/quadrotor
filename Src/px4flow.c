@@ -19,6 +19,7 @@ extern float channel_1, channel_2, channel_3;
 extern float px_setpoint, py_setpoint;
 extern uint8_t hovering_controller ;
 uint8_t ground_distance_count = 0, ground_distance_fail_count = 0;
+uint8_t px4flow_error ;
 
 uint8_t data_integral[26];
 float pixel_x, pixel_y;
@@ -102,9 +103,9 @@ void PX4Flow_Init(void){
     pid_poshold_max = sin(poshold_pid_max * DEG_TO_RAD);
     _kp_pos_of = 0.00055f;
     slow_ctrler_cnt = 0;
-		kp_hovering = 0.1f;///0.03f; //0.20588
-		ki_hovering = 0.05f ;//0.05f;
-		kd_hovering = 0.08f;//0.25f ;//0.02735f;
+		kp_hovering = 0.08f;///0.1f; //0.20588
+		ki_hovering = 0.03f ;//0.05f;
+		kd_hovering = 0.105f;//0.08f ;//0.02735f;
 		px = py = 0.0f;
 }
 
@@ -123,7 +124,7 @@ void PID_Controller_Altitude(uint16_t channel_3, float distance)
 {
 	if (channel_3 > THROTTLE_P)
 	{
-		altitude_setpoint = 70.0f;
+		altitude_setpoint = 65.0f;
 	}
 	else 
 		altitude_setpoint = distance;
@@ -186,21 +187,13 @@ void PX4Flow_get_data(void){
 		if( distance_real < 30) distance_real = 30.0f;
 		PID_Controller_Altitude(channel_3, distance_real);
 	}
-	
-//	delta_sonar = ground_distance_cm - pre_ground_distance_cm;
-//	if ((delta_sonar > 70.0f) || (delta_sonar < -70.0f)){
-//		ground_distance_cm = pre_ground_distance_cm;
-//	}
-	
-	
+		
 //  real_delta_sonar = average_filter(delta_sonar_buffer, DELTA_SONAR_SIZE, pre_ground_distance_cm - ground_distance_cm, &delta_sonar_cnt);
 	
 //	ground_distance_filtered = LPF(ground_distance_cm, pre_ground_distance_cm, 50.0f, 0.048f);
   //ground_distance_filtered = average_filter(real_distance_buffer, DELTA_SONAR_DISTANCE, ground_distance_cm, &real_distance_counter);
 //	ground_distance_filtered = ground_distance_filtered*0.5f + ground_distance_cm*0.5f;
 	
-//	pre_ground_distance_cm = ground_distance_cm;
-//	real_ground_distance = ground_distance_filtered * cos(roll * M_PI/180.0f) * cos(pitch * M_PI/180.0f);
 	
   if (quality > 150) {
     // Update flow rate with gyro rate
@@ -242,18 +235,18 @@ void PX4Flow_get_data(void){
     py_bf = -(-px) * sin_yaw + py * cos_yaw;
     px_bf = -px_bf;
   }
-//	if (quality == 0)
-//	{
-//		count_error++;
-//	}
-//	else
-//	{
-//		count_error = 0;
-//	}
-//	if (count_error == 10)
-//	{
-//		hovering_controller = 1;
-//	}
+	if (quality < 150)
+	{
+		count_error++;
+	}
+	else
+	{
+		count_error = 0;
+	}
+	if (count_error == 100)
+	{
+		px4flow_error = 1;
+	}
 	
   if (slow_ctrler_cnt == (POS_CONTROLLER_T - 1)){
     slow_ctrler_cnt = 0;
@@ -428,14 +421,12 @@ void PX4Flow_get_sp_vel(float * v_out_x, float * v_out_y, float px_pf, float py_
 //					else vy_sp_out = 0.0f;
 
 	
-	if (channel_1 > 1500) px_setpoint = px_setpoint + ((channel_1) - 1500)*100/500;
-	else if (channel_1 <1470) px_setpoint = px_setpoint - (1470 - (channel_1))*100/470;
+	if (channel_1 > 1500) px_setpoint = px_setpoint - ((channel_1) - 1500)*100/500;
+	else if (channel_1 <1470) px_setpoint = px_setpoint + (1470 - (channel_1))*100/470;
 	
 	if (channel_2 > 1535) py_setpoint = py_setpoint + ((channel_2) - 1535)*100/465;
 	else if (channel_2 <1505) py_setpoint = py_setpoint - (1505 - (channel_2))*100/505;
-//	
-//	vx_sp_out = _kp_pos_of * (px_setpoint - px_pf);
-//	vy_sp_out = _kp_pos_of * (py_setpoint - py_pf);
+
 	
 //	vx_sp_out = _kp_pos_of * (0.0f - px_pf);
 //	vy_sp_out = _kp_pos_of * (0.0f - py_pf);

@@ -9,7 +9,7 @@
 #define 	MPU6050_DEVICE_ADRESS				0xD0 // 0x68<<1
 #define 	AK8963_DEVICE_ADRESS				0x18 // 0x0C<<1
 
-#define 	THROTTLE_P													1465
+#define 	THROTTLE_P													1480
 
 #define	PWR_MGMT_1		0x6B	//Power Management. Typical values:0x00(run mode)
 #define	SMPLRT_DIV		0x19	//Sample Rate Divider. Typical values:0x07(125Hz) 1KHz internal sample rate
