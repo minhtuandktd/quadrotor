@@ -15,11 +15,13 @@
 struct px4_i2c_integral_frame iframe;
 extern I2C_HandleTypeDef hi2c2;
 extern float yaw, pitch, roll;
+
 extern float channel_1, channel_2, channel_3;
 extern float px_setpoint, py_setpoint;
 extern uint8_t hovering_controller ;
 uint8_t ground_distance_count = 0, ground_distance_fail_count = 0;
 uint8_t px4flow_error ;
+
 
 uint8_t data_integral[26];
 float pixel_x, pixel_y;
@@ -56,7 +58,7 @@ float kp_hovering = 0.20588f, ki_hovering = 0.05f, kd_hovering = 0.02735f;
 float angle_compensate_roll, angle_compensate_pitch;
 float _kp_pos_of = 0.00055f;
 float velocity_sp_lpf_hz = 12.0f;
-extern float px_setpoint, py_setpoint;
+extern float px_setpoint, py_setpoint, vx_setpoint, vy_setpoint;
 
 void readRegisterPX4(uint8_t subAddress, uint8_t count, uint8_t* dest)
 {
@@ -235,6 +237,7 @@ void PX4Flow_get_data(void){
     py_bf = -(-px) * sin_yaw + py * cos_yaw;
     px_bf = -px_bf;
   }
+<<<<<<< HEAD
 	if (quality < 150)
 	{
 		count_error++;
@@ -248,6 +251,9 @@ void PX4Flow_get_data(void){
 		px4flow_error = 1;
 	}
 	
+=======
+#if POSITION_CONTROL	
+>>>>>>> 48bab97780b20d97282318c2d937fa7923ad4fcd
   if (slow_ctrler_cnt == (POS_CONTROLLER_T - 1)){
     slow_ctrler_cnt = 0;
 //		PX4Flow_get_sp_vel(&vx_sp, &vy_sp, px, py, px_setpoint, py_setpoint);
@@ -256,6 +262,10 @@ void PX4Flow_get_data(void){
   slow_ctrler_cnt++;
 	
   px4flow_position_pid(vx_sp, vy_sp, vel_x_vip, vel_y_vip);
+#else
+  px4flow_position_pid(vx_setpoint, vy_setpoint, vel_x_vip, vel_y_vip);
+	
+#endif
   /*
   Convert angle to rc
   */
